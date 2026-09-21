@@ -30,8 +30,8 @@
 |------|------|---------|
 | P0 需求摄入 | docs/00-request/request.md + docs/01-requirements/prd.md | 需求经 grill-me 澄清（或用户明确免问）；每个 P0 需求有可测试验收标准 |
 | P1 设计与选型 | docs/02-design/architecture.md + decisions/（ADR） | 最小可行栈；显著决策有 ADR；模块只依赖契约 |
-| P2 任务计划 | docs/03-plan/tasks.md | 每任务有 DoD；每批可独立验证 |
-| P3 脚手架 | 骨架 + .env.example + 构建配置 | 空壳 build+test 在干净环境通过 |
+| P2 任务计划 | docs/specs/001-switch-preset/tasks.md | 每任务有 DoD；每批可独立验证 |
+| P3 脚手架 | 骨架 + 构建配置 | 空壳 build+test 在干净环境通过 |
 | P4 增量实现 | 每批：代码+测试+文档+经验 | 单测绿；FILE_INDEX/MEMORY/进度已更新；中途需求已按变更协议登记 spec（原话+版本+验收标准） |
 | P5 测试加固 | docs/05-testing/ 带证据报告 | 安全/可靠性/性能/可观测清单逐项过完 |
 | P6 交付复盘 | README/运行手册/CHANGELOG/复盘/总结 | quality-gate 全绿；已知限制列明 |

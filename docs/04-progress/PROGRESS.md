@@ -38,6 +38,22 @@ applies_to: dsh-switch-preset
   `ctx.inject(['settings'])` 二次注入 + 惰性解析）；用户实测 `/list-preset` 正常、
   已开始会话降级路径成功。client 产物门禁补「无顶层 import/export + node --check」。
 
+## ✅ 已完成（最新一批，2026-09-21 追加）
+
+- **以终为始清理**（用户要求）：移除 init 脚手架残留与无效内容——
+  `tests/`（与 test/ 重复的空壳）、`src/.gitkeep`、`MANUAL.md`、`.env.example`、
+  `prompts/`、`standards/languages/{java,python,rust,go}.md`、docs 各模板
+  （example-request/prd-template/architecture-template/tasks-template/adr-template/specs/_template）、
+  工程工具脚本（init-project/cleanup-framework/install-dsh/project-lib）、
+  **无效 ADR-001**（fork/create 方案已废弃，由 **ADR-002**（recompose）取代并删除）、
+  `lib-test/`（可再生产物）、`test-home/`（3084 已停，临时实例 99M）。
+- **有效内容归档**：recompose 生产实证（session-f6101952：切换事件 seq545 + 完整 system prompt
+  对比 learning/video）归档 `docs/05-testing/2026-09-21-recompose-production-proof.md` + 两份
+  system-prompt 原文。
+- 同步：FILE_INDEX 重写 v2.0.0、AGENTS.md 断引用修正（P2 tasks 路径、P3 .env.example）、
+  decisions/README.md 索引登记 ADR-002。doc-check / npm check / quality-gate 全绿。
+- 已推远程（私有 IamWWT/dsh-switch-preset）。
+
 ## 🔄 进行中（中断点）
 
 - **0.3.0 待用户重启 3082 生效**：插件已 link 安装 + lib 已重建 0.3.0，但运行中的 3082 是旧代码；
