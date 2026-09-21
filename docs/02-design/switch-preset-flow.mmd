@@ -1,0 +1,35 @@
+flowchart TD
+  subgraph "入口（两条通道，共享同一 Host 逻辑）"
+    KB["键盘输入 /switch-preset &lt;id&gt;"]
+    BT["composer 🔄 选择器点选（构造同一命令行经 remote.commands.execute）"]
+  end
+
+  H["Host handler：ctx.commands.register"]
+  V["校验：id 格式（PRESET_ID_PATTERN）+ agentPresets.list() 存在且未 broken"]
+  CUR["读当前模式：sessionProjections.stateOf(session,'agentPreset')"]
+
+  S{"agentPresets.select()<br/>（内部做空会话锁定检查<br/>turnBoundary）"}
+  OK1["✅ 返回：已把当前会话切换为 X，就地生效"]
+
+  R["强制路径：agentPresets.recompose(agent.ctx, id)<br/>（无锁定检查，重挂 scope 到目标 preset 常驻组合）"]
+  APP["落盘：session.append('agent-preset/selected',{agentPreset})<br/>（投影/header 更新，重启后按新模式重建）"]
+  OK2["✅ 返回：当前会话（含既有历史）就地切换 + 工具解析警告"]
+
+  F{"recompose 可用且<br/>agent.ctx / session.append 完整？"}
+  D["降级：settings.update('agent-presets',{default})<br/>（影响之后新建会话）"]
+  OK3["✅ 返回：已设为默认模式（当前会话不动）"]
+  E["❌ 明确报错（零副作用）"]
+
+  KB --> H
+  BT --> H
+  H --> V
+  V -->|"非法/不存在/broken"| E
+  V --> CUR
+  CUR --> S
+  S -->|"空会话：检查通过"| OK1
+  S -->|"已开始会话：抛 agent-preset/locked"| F
+  F -->|"是"| R
+  R --> APP
+  APP --> OK2
+  F -->|"否"| D
+  D --> OK3

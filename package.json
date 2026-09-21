@@ -1,0 +1,64 @@
+{
+  "name": "dsh-switch-preset",
+  "version": "0.3.0",
+  "description": "DSH 会话模式切换：/switch-preset 在当前会话切换 Agent preset（空会话正规切换；已开始会话强制重装配），/list-preset 查看模式 id 与中文描述。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "session",
+    "preset",
+    "mode",
+    "switch"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "scripts/",
+    "test/",
+    "tsconfig.json",
+    "tsconfig.client.json",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE",
+    "docs/"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": ">=3.18.0 <4.0.0-0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0",
+    "@types/node": "^22",
+    "esbuild": ">=0.20.0",
+    "typescript": ">=5.0.0 <6.0.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs --no-typecheck",
+    "build:full": "node scripts/build.mjs",
+    "typecheck": "node scripts/typecheck.mjs",
+    "test": "node test/smoke-test.mjs && node test/switch-test.mjs",
+    "check": "node scripts/build.mjs && node test/smoke-test.mjs && node test/switch-test.mjs",
+    "pack": "npm pack",
+    "install:dev": "bash scripts/install-to-dsh.sh"
+  }
+}

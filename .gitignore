@@ -1,0 +1,42 @@
+# ── 环境变量与凭证 ──
+.env
+.env.*
+!.env.example
+
+# ── 构建产物 ──
+target/
+dist/
+build/
+*.class
+*.jar
+*.pyc
+__pycache__/
+.venv/
+venv/
+node_modules/
+*.egg-info/
+
+# ── 运行时数据 ──
+logs/
+data/
+*.log
+
+# ── IDE / 本地状态 ──
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.claude/
+.claude.resume
+.codex/
+
+# 框架拷贝转正后的归档内容（cleanup-framework.sh 产生，可恢复）
+_framework-archive/
+
+.npm-cache/
+
+# ── 测试产物 ──
+lib/
+lib-test/
+test-home/

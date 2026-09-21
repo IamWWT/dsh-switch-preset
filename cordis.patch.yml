@@ -1,0 +1,10 @@
+# cordis.patch.yml — dsh-switch-preset 的 DSH bundle 补丁（config 层注入）
+#
+# insert 块让 loader 实例化本插件（id/name 声明 + 可选 config 层）。
+# config 在此省略：inheritHistory 默认值由插件 Config schema 提供（false），
+# 用户可在个人 cordis.yml / 设置文档中覆盖；设置卡写入 switchPreset 命名空间。
+# 教训（2026-09-17）：patch 文件若为顶层空数组，插件虽进 bundles 清单但**不会
+# 被实例化**（dump-config 组合树无条目、apply 不执行）——必须含 insert 行。
+- insert:
+  - id: switch-preset
+    name: dsh-switch-preset
