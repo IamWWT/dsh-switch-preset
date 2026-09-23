@@ -2,7 +2,9 @@
 
 DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会话内**切换 Agent preset（DSH 的"会话模式"），并用 `/list-preset` 查看可填写的模式 id 与中文描述。
 
-> 版本: 0.3.0 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> 版本: 0.4.0 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> v0.4.0（2026-09-23）：**harness 0.1.7 原地对齐**（roster 字段/策略对象、默认模式写入目标改为
+> `agent-preset-registry.selectedDefault`、尊重 `modeSelectionEnabled`、命令改二级注入）；
 > v0.3.0（2026-09-18）：对已开始会话支持 **recompose 强制切换**（含历史原地换模式）。语义演进见 `CHANGELOG.md` 与 `docs/REQUIREMENTS.md`。
 
 ## 功能一览

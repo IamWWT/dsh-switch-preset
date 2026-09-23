@@ -22,10 +22,16 @@ export interface ReactLike {
 
 /** 模式选择器对外依赖（由 entry.ts 注入真实实现）。 */
 export interface PickerDeps {
-  /** 拉取模式清单（roster），须带超时。 */
-  fetchPresets: (signal: AbortSignal) => Promise<readonly PresetRow[]>
+  /** 拉取模式清单（0.1.7 roster：行 + modeSelectionEnabled），须带超时。 */
+  fetchPresets: (signal: AbortSignal) => Promise<PickerRoster>
   /** 执行 `/switch-preset <id>`（remote.commands.execute 封装），须带超时。 */
   executeSwitch: (sessionId: string, presetId: string) => Promise<void>
+}
+
+/** 0.1.7 的 roster 形状：`remote.agentPresets.list()` 返回对象（不再是裸数组）。 */
+export interface PickerRoster {
+  readonly presets: readonly PresetRow[]
+  readonly modeSelectionEnabled: boolean
 }
 
 export interface MakeUiOptions {
@@ -65,6 +71,7 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null)
   const [rows, setRows] = useState<readonly PresetRow[] | null>(null)
+  const [modeSelection, setModeSelection] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -76,8 +83,9 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 8000)
     try {
-      const list = await picker.fetchPresets(ctrl.signal)
-      setRows(list)
+      const roster = await picker.fetchPresets(ctrl.signal)
+      setRows(roster.presets)
+      setModeSelection(roster.modeSelectionEnabled)
     } catch (e) {
       setError(e instanceof Error && e.name === 'AbortError'
         ? '加载模式列表超时，请重试'
@@ -151,13 +159,17 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
     if (loading) panel.push(h('div', { key: 'loading', style: { padding: 8, color: THEME.labelSecondary } }, '加载模式列表…'))
     if (error) panel.push(h('div', { key: 'error', style: { padding: 8, color: THEME.danger, fontSize: 12 } }, error))
     if (!loading && rows && rows.length === 0) {
-      panel.push(h('div', { key: 'empty', style: { padding: 8, color: THEME.labelSecondary } }, '没有可用模式（请检查 agent-presets 配置）'))
+      panel.push(h('div', { key: 'empty', style: { padding: 8, color: THEME.labelSecondary } }, '没有可用模式（请检查 agent preset 配置）'))
+    }
+    if (!modeSelection) {
+      panel.push(h('div', { key: 'modesel-off', style: { padding: '6px 8px', color: THEME.labelSecondary, fontSize: 12 } },
+        '部署已关闭「模式选择」：新会话固定用默认模式，切换只对当前会话生效。'))
     }
     if (!loading && rows) {
       for (const row of rows) {
         const disabled = row.broken || busy
-        const title = row.displayName && row.displayName !== row.id
-          ? `${row.displayName}（${row.id}）`
+        const title = row.name && row.name !== row.id
+          ? `${row.name}（${row.id}）`
           : row.id
         panel.push(h('button', {
           key: row.id,

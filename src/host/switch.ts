@@ -13,26 +13,34 @@
  *   - 幂等：目标 == 当前模式 → 成功文案说明已是该模式
  */
 import {
-  AGENT_PRESETS_NS,
+  AGENT_PRESET_REGISTRY_ID,
   COMMAND_NAME,
-  KEY_DEFAULT_PRESET,
+  KEY_SELECTED_DEFAULT,
   LIST_COMMAND_NAME,
   PRESET_ID_PATTERN,
   type AgentLike,
+  type PresetRoster,
   type PresetRow,
   type SwitchDeps,
   type SwitchResult,
 } from '../shared/contracts.ts'
 
-/** 把 roster 行渲染成展示块（列表指令输出用；中文名与中文描述来自 preset.yml）。 */
+/**
+ * 读 roster + 策略。
+ * 0.1.7 的单一真源是 `remoteExportList()`：一次拿到 `{ presets, modeSelectionEnabled }`，
+ * 且每行带 `isDefault`——不再需要自己从 `isDefault` 猜默认模式。
+ */
+async function readRoster(deps: SwitchDeps): Promise<PresetRoster> {
+  return deps.agentPresets.remoteExportList()
+}
+
+/** 把 roster 行渲染成展示块（列表指令输出用；中文名与中文描述来自 preset.yml 的 name/description）。 */
 export function renderPresetRow(row: PresetRow, currentId?: string, defaultId?: string): string {
-  const label = row.displayName && row.displayName !== row.id
-    ? `${row.displayName}（${row.id}）`
-    : row.id
+  const label = row.name && row.name !== row.id ? `${row.name}（${row.id}）` : row.id
   const marks: string[] = []
   if (row.id === currentId) marks.push('当前会话')
   if (row.isDefault || row.id === defaultId) marks.push('默认')
-  if (row.broken) marks.push('已损坏，不可用')
+  if (row.broken) marks.push(`已损坏，不可用：${row.broken}`)
   const suffix = marks.length > 0 ? `  ← ${marks.join(' / ')}` : ''
   const desc = row.description ? `\n      ${row.description}` : ''
   return `  - ${label}${suffix}${desc}`
@@ -40,22 +48,21 @@ export function renderPresetRow(row: PresetRow, currentId?: string, defaultId?: 
 
 /** 中文名优先的简短称谓（成功文案用）。 */
 function labelOf(row: PresetRow): string {
-  return row.displayName && row.displayName !== row.id
-    ? `${row.displayName}（${row.id}）`
-    : row.id
+  return row.name && row.name !== row.id ? `${row.name}（${row.id}）` : row.id
 }
 
-/** 列表渲染：id + 中文名 + 中文描述 + 当前/默认标注 + 用法提示。 */
+/** 列表渲染：id + 中文名 + 中文描述 + 当前/默认标注 + 模式选择开关状态 + 用法提示。 */
 async function renderList(agent: AgentLike, deps: SwitchDeps): Promise<SwitchResult> {
-  let rows: readonly PresetRow[]
+  let roster: PresetRoster
   try {
-    rows = await deps.agentPresets.list()
+    roster = await readRoster(deps)
   } catch (error) {
     return {
       kind: 'error',
       text: `读取模式清单失败：${error instanceof Error ? error.message : String(error)}`,
     }
   }
+  const rows = roster.presets
   const current = await deps.currentPreset?.(agent)
   const defaultRow = rows.find(r => r.isDefault)
   const defaultId = defaultRow?.id
@@ -65,9 +72,12 @@ async function renderList(agent: AgentLike, deps: SwitchDeps): Promise<SwitchRes
   const lines: string[] = []
   lines.push(`当前会话模式：${current ?? '（未识别）'}`)
   lines.push(`默认模式：${defaultId ?? '（未声明）'}`)
+  if (!roster.modeSelectionEnabled) {
+    lines.push('模式选择：已关闭（新会话固定用部署默认模式；/switch-preset 只能改当前会话）')
+  }
   lines.push('')
   if (usable.length === 0) {
-    lines.push('可用模式：无（请检查 agent-presets 配置）')
+    lines.push('可用模式：无（请检查 agent preset 配置）')
   } else {
     lines.push(`可用模式（${usable.length}）—— 用于 /${COMMAND_NAME} <id>：`)
     for (const row of usable) lines.push(renderPresetRow(row, current, defaultId))
@@ -110,15 +120,16 @@ export async function switchPreset(
       text: `模式 id 格式不正确：${presetId}（应为小写字母/数字/中划线）。用 /${LIST_COMMAND_NAME} 查看可用 id。`,
     }
   }
-  let rows: readonly PresetRow[]
+  let roster: PresetRoster
   try {
-    rows = await deps.agentPresets.list()
+    roster = await readRoster(deps)
   } catch (error) {
     return {
       kind: 'error',
       text: `读取模式清单失败：${error instanceof Error ? error.message : String(error)}`,
     }
   }
+  const rows = roster.presets
   const target = rows.find(r => r.id === presetId)
   if (!target || target.broken) {
     return {
@@ -174,15 +185,27 @@ export async function switchPreset(
     }
   }
 
-  // 4. 强制切换不可用（宿主未提供 recompose / agent 形状不完整）→ 降级为写默认模式
-  if (!deps.setDefaultPreset) {
+  // 4. 强制切换不可用（宿主未提供 recompose / agent 形状不完整）→ 降级为写默认模式。
+  //    0.1.7 语义：默认模式 = 条目 agent-preset-registry 的 selectedDefault，
+  //    且注册表策略是 `modeSelectionEnabled ? selectedDefault ?? default : default`
+  //    —— 开关关闭时写它**不生效**，此时必须如实失败，不能假报成功。
+  if (!roster.modeSelectionEnabled) {
     return {
       kind: 'error',
-      text: `当前会话已开始，DSH 限制 preset 固定；当前宿主不支持强制切换，且设置服务不可用，无法改默认模式（${AGENT_PRESETS_NS}.${KEY_DEFAULT_PRESET}）。`,
+      text: `当前会话已开始，本版本 DSH 不允许就地换模式；且部署已关闭「模式选择」`
+        + `（${AGENT_PRESET_REGISTRY_ID}.modeSelectionEnabled=false），写默认模式不会生效。`
+        + `\n如需换模式：新建会话，或先在设置里打开模式选择。`,
+    }
+  }
+  if (!deps.writeDefaultPreset) {
+    return {
+      kind: 'error',
+      text: `当前会话已开始，DSH 限制 preset 固定；且设置服务不可用，无法改默认模式`
+        + `（${AGENT_PRESET_REGISTRY_ID}.${KEY_SELECTED_DEFAULT}）。`,
     }
   }
   try {
-    await deps.setDefaultPreset(presetId)
+    await deps.writeDefaultPreset(presetId)
   } catch (error) {
     return {
       kind: 'error',

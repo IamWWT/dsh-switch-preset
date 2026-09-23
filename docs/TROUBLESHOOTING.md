@@ -119,3 +119,40 @@ sessions.open 服务名、settingsScope API。
   无法解析（这是框架默认禁止的核心理由）。已在切换成功文本中附警告。
 - **降级链**：`recompose` 缺失 → 写默认模式（`agent-presets.default`）；再失败 → 明确报错。
 - 基线：`packages/preset/agent-presets/src/index.ts` `recompose(agentCtx: Context, id)`。
+
+## 0.1.7 挂载异常：宿主模块被 import，但 `apply` 从未执行（2026-09-23，未闭环）
+
+**现象**：升级 harness 0.1.7-alpha.2 后 `/switch-preset` 与 `/list-preset` **毫无输出**。
+
+**已确认的事实**（隔离实例实测：独立 `DSH_HOME` + 独立端口，不碰 3082）：
+
+1. 组合树里条目存在：`dsh --profile web --dump-config | grep -A2 switch-preset` →
+   `- id: switch-preset` / `name: dsh-switch-preset`。
+2. 宿主模块**被 import 了**：在 `lib/index.js` 模块作用域加 `console.error('[PROBE-IMPORT] …')`
+   → 启动日志出现该行。
+3. `apply` **从未进入**：把 `ctx.logger.info('[PROBE2] apply entered')` 放在 `apply` 第一行
+   → 启动日志**没有**该行（同批 sidebar-hub `[sidebar-hub] host apply`、global-auth `已加载`、
+   agent-platform-connector `预设 10 个` 均正常出现）。
+
+**已排除的原因**：命令重名（全 profile 只有本插件注册 `list-preset`）；inject 门控
+（把插件级静态 `inject` 改成 `[]` 后仍不执行）；条目级 `inject`/`config`（都给上仍不执行）；
+安装方式（link 与 tgz 两种布局都复现）；条目被 disabled（profile patch 与组合树中均无 `disabled`）；
+模块导入失败（导入成功且有日志）。
+
+**当前采用的写法**（即便挂载问题未闭环，也已是 0.1.7 的正确姿势）：
+插件级静态 `inject` 留空，命令注册走二级注入
+`ctx.inject(['commands','agentPresets'], (cctx) => cctx.commands.register(...))`
+——与工作区里能正常工作的 `dsh-gateway-compaction` 一致。
+
+**复现步骤**（供下一步定位）：
+
+```bash
+# 1) 建隔离 home（复制 profile 的 package.json 与 cordis.patch.yml，node_modules 软链）
+# 2) 启动：独立端口，绝不占用 3082
+cd deepseek-harness && DSH_HOME=<隔离 home> pnpm dsh web --port 3110 --no-open
+# 3) 看日志：应出现其他插件的自报行，但本插件一行都没有
+```
+
+**下一步候选假设**（尚未验证）：条目 id 复用导致的历史状态残留（可试改 `id: switch-preset-v4`）；
+bundle 层 patch 的 insert 行在 0.1.7 需要额外字段；本插件的 `dsh.client.inject: []` 与
+`dsh.bundle.patch` 组合在 0.1.7 的校验路径上与兄弟插件不同。

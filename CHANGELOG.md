@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## 0.4.0（2026-09-23）— harness 0.1.7 原地对齐（无兼容垫片）
+
+- **背景**（用户原话）：「因为新版本的dsh preset模式管理方式变了…一定要贴和dsh现在能力，不要补丁，要原地更新」；
+  现场症状：`/list-preset` 毫无输出。
+- **上游已核实的变化**（依据 `deepseek-harness/packages/preset/agent-preset-registry/src/` 与
+  `packages/settings/settings/src/`，均为 0.1.7-alpha.2 源码）：
+  1. roster 行字段是 `name`（不再是 `displayName`）；`list()` 仍是异步数组，而
+     `remoteExportList()`（客户端 `remote.agentPresets.list()` 的宿主实现）返回
+     `{ presets, modeSelectionEnabled }`——清单与策略的单一真源。
+  2. 「默认模式」不再属于任何 `agent-presets` 设置命名空间（0.1.7 无此条目，写它会抛
+     `No configurable plugin entry`）；它是内置条目 **`agent-preset-registry`** 的 volatile 字段
+     **`selectedDefault`**，经 `ctx.settings.mutate(entryId, [{op:'set',path:[…]}], revision)` 写。
+  3. 注册表策略 = `modeSelectionEnabled ? selectedDefault ?? default : default`：
+     开关关闭时写 `selectedDefault` **不生效**，必须显式失败而不是假报成功。
+- **实现**（原地更新，未引入兼容分支）：
+  - `shared/contracts.ts`：roster/策略契约改为 0.1.7 形状（`PresetRoster`、`name`、字符串 `broken`）。
+  - `host/command.ts`：默认模式写入改为 `settings.describe()` 定位注册表条目（不硬编码 id，回退内置 id）
+    + `settings.mutate('…', [{op:'set',path:['selectedDefault'],value:id}], revision)`。
+  - `host/switch.ts`：清单与默认标注统一走 `remoteExportList()`；`modeSelectionEnabled=false` 时
+    降级路径直接给出解释性错误（不制造无效写入）。
+  - `client/entry.ts` + `client/ui.ts`：`remote.agentPresets.list()` 改为读 roster 对象
+    （`presets` + `modeSelectionEnabled`），弹层显示模式选择开关状态；行标题用 `name`。
+  - 命令注册改为二级注入（`ctx.inject(['commands','agentPresets'], cb)`），不再把 `commands`
+    写进插件级静态 `inject`——见 docs/TROUBLESHOOTING.md 的 0.1.7 条目。
+- **测试**：`test/switch-test.mjs` 夹具同步到 0.1.7 契约，并新增「modeSelectionEnabled=false」用例；
+  `pnpm check` 全绿。
+- **已知未闭环（如实记录）**：在隔离实例（独立 DSH_HOME + 独立端口）上实测，本插件的宿主模块
+  **被 import 了但 `apply` 从未执行**（模块级插桩有日志、`apply` 首行插桩无日志），
+  同批的 sidebar-hub / global-auth / agent-platform-connector 均正常 apply。已排除：命令重名、
+  inject 门控（`inject=[]` 仍不执行）、条目级 inject/config、link↔tgz 安装方式、条目被 disabled。
+  详见 docs/TROUBLESHOOTING.md「0.1.7 挂载异常」条目（含复现步骤）。
+
 ## 0.3.0（2026-09-18）— 已开始会话「强制切换」模式
 
 - **需求**（用户原话）：「我希望当前已经是xx模式的会话可以变更yy模式，当前会话已经有历史会话了，总之我要这样」。

@@ -44,16 +44,21 @@ await build({
 const { switchPreset, listPresets } = await import(pathToFileURL(outfile).href)
 
 /** 夹具：roster 本机真实形状（中文名+中文描述+默认标注）；支持 recompose 可选。 */
-function makeDeps(overrides = {}, { withRecompose = true } = {}) {
+function makeDeps(overrides = {}, { withRecompose = true, modeSelectionEnabled = true } = {}) {
   const calls = { select: [], setDefault: [], recompose: [], append: [] }
+  // 0.1.7 契约：roster 通过 remoteExportList() 返回 { presets, modeSelectionEnabled }，
+  // 行字段是 name（不再是 displayName），broken 是"损坏原因"字符串。
   const presets = {
-    list: async () => {
+    remoteExportList: async () => {
       calls.list += 1
-      return [
-        { id: 'engineering', displayName: '工程模式', description: 'DSH 软件工程交付 Agent：七阶段交付流程…' },
-        { id: 'research', displayName: '研究模式', description: '通用研究 Agent：证据优先…', isDefault: true },
-        { id: 'broken-x', broken: true, description: '损坏示例' },
-      ]
+      return {
+        presets: [
+          { id: 'engineering', name: '工程模式', description: 'DSH 软件工程交付 Agent：七阶段交付流程…' },
+          { id: 'research', name: '研究模式', description: '通用研究 Agent：证据优先…', isDefault: true },
+          { id: 'broken-x', broken: 'composition 加载失败', description: '损坏示例' },
+        ],
+        modeSelectionEnabled: modeSelectionEnabled,
+      }
     },
     select: async (_agent, id) => { calls.select.push(id); return id },
     ...(withRecompose
@@ -64,7 +69,7 @@ function makeDeps(overrides = {}, { withRecompose = true } = {}) {
   }
   return {
     agentPresets: presets,
-    setDefaultPreset: async (id) => { calls.setDefault.push(id) },
+    writeDefaultPreset: async (id) => { calls.setDefault.push(id) },
     currentPreset: async () => 'engineering',
     calls,
     ...overrides,
@@ -176,7 +181,7 @@ console.log('[8/10] locked + 无 recompose + 无设置服务 → error（不静�
 {
   const locked = new Error('already started')
   locked.code = 'agent-preset/locked'
-  const deps = makeDeps({ setDefaultPreset: undefined }, { withRecompose: false })
+  const deps = makeDeps({ writeDefaultPreset: undefined }, { withRecompose: false })
   deps.agentPresets.select = async () => { throw locked }
   const r = await switchPreset(agent, 'research', deps)
   check('kind=error', r.kind === 'error')
@@ -204,3 +209,12 @@ console.log('[10/10] select 非锁定错误 → 原样报错')
 
 console.log(failures === 0 ? '\n✅ switch-test 全部通过' : `\n❌ ${failures} 项失败`)
 process.exit(failures === 0 ? 0 : 1)
+console.log('[11/11] modeSelectionEnabled=false：写默认模式不生效 → 显式失败（不假报成功）')
+{
+  const deps = makeDeps({}, { withRecompose: false, modeSelectionEnabled: false })
+  deps.agentPresets.select = async () => { throw locked }
+  const r = await switchPreset(agent, 'research', deps)
+  check('kind=error', r.kind === 'error')
+  check('说明模式选择已关闭', r.text.includes('模式选择'))
+  check('未写默认模式（不制造无效写入）', deps.calls.setDefault.length === 0)
+}

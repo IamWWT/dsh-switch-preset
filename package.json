@@ -1,6 +1,6 @@
 {
   "name": "dsh-switch-preset",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "DSH 会话模式切换：/switch-preset 在当前会话切换 Agent preset（空会话正规切换；已开始会话强制重装配），/list-preset 查看模式 id 与中文描述。",
   "keywords": [
     "dsh",
@@ -23,7 +23,6 @@
     "lib/",
     "src/",
     "scripts/",
-    "test/",
     "tsconfig.json",
     "tsconfig.client.json",
     "cordis.patch.yml",

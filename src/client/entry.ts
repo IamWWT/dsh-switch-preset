@@ -32,13 +32,17 @@ interface RemoteCommands {
 }
 
 interface RemoteAgentPresets {
-  list(): Promise<RpcResult<readonly {
-    readonly id: string
-    readonly displayName?: string
-    readonly description?: string
-    readonly broken?: boolean
-    readonly isDefault?: boolean
-  }[]>>
+  /** 0.1.7：`@Remote('list')` 返回 roster 对象（presets + modeSelectionEnabled），不再是裸数组。 */
+  list(): Promise<RpcResult<{
+    readonly presets: readonly {
+      readonly id: string
+      readonly name?: string
+      readonly description?: string
+      readonly broken?: string
+      readonly isDefault?: boolean
+    }[]
+    readonly modeSelectionEnabled: boolean
+  }>>
 }
 
 interface SlotsLike {
