@@ -14,7 +14,7 @@ applies_to: dsh-switch-preset
 
 | 项 | 内容 |
 |----|------|
-| 目标项目路径 | `dsh-plugins/dsh-switch-preset`（相对工作区根 `/home/wwt/Downloads/aigc/proj/deepseek`） |
+| 目标项目路径 | `dsh-plugins/dsh-switch-preset`（相对工作区根 `${DEEPSEEK_ROOT}`） |
 | 项目说明 | DSH 插件：斜杠指令 `/switch-preset` 切换当前会话的 Agent preset（模式），新会话是否继承历史上下文由设置决定；client 自动跳转到新会话 |
 | 联合开发路径 | 无（只读参照：`deepseek-harness/` 源码与文档、`dsh-plugins/dsh-scheduled-send/` 工程范本） |
 | 白名单纪律 | write/edit 只允许落在目标项目路径内；白名单外只读参照 |

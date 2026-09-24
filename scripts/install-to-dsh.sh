@@ -27,7 +27,10 @@ if [ -z "$DSH_HOME_TARGET" ]; then
   echo "错误: 未指定目标 DSH_HOME（防误装生产）。用法: TARGET_DSH_HOME=<dir> $0" >&2
   exit 1
 fi
-HARNESS_DIR="${HARNESS_DIR:-/home/wwt/Downloads/aigc/proj/deepseek/deepseek-harness}"
+# shellcheck source=./paths.sh
+source "$(dirname "${BASH_SOURCE[0]}")/paths.sh"
+HARNESS_DIR="${HARNESS_DIR:-${DSH_HARNESS_ROOT:-$(dsh_resolve_harness "$ROOT")}}"
+[ -n "$HARNESS_DIR" ] && [ -d "$HARNESS_DIR" ] || { dsh_harness_error; exit 1; }
 echo "==> [2/4] 目标 DSH_HOME: $DSH_HOME_TARGET"
 [ -d "$DSH_HOME_TARGET" ] || { echo "错误: $DSH_HOME_TARGET 不存在（临时实例请先用 pnpm dsh web 初始化一次）" >&2; exit 1; }
 

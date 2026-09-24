@@ -73,3 +73,8 @@ npm test               # 冒烟 + switch 逻辑单测
 - 指令仅在交互式 Web 界面可用（`commands` 服务在无 UI 组合中不存在）。
 
 更多决策与踩坑：`docs/`（`specs/001-switch-preset/` 为规格三件套，`TROUBLESHOOTING.md` 含 DSH API 版本基线）。
+<!-- deepseek-shared-layout -->
+
+## Windows / Ubuntu 共用目录
+
+本项目遵循 [DeepSeek 共用目录约定](../dsh-agent-presets/docs/DIRECTORY-LAYOUT.md)。管理根统一写作 `<DEEPSEEK_ROOT>`（`.../deepseek/`），历史部署记录不能视为当前机器状态；Bash/systemd 命令只适用于对应环境，配置文件中的路径须在本机解析。
