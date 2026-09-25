@@ -35,7 +35,7 @@ export const name = 'dsh-switch-preset'
 export const inject: string[] = []
 
 /** 与 package.json version 同步（四处同步，改版本必同步本行）。 */
-export const VERSION = '0.4.0'
+export const VERSION = '0.4.1'
 
 /** 在 Web 交互式界面运行时注册 /switch-preset 与 /list-preset。 */
 export function apply(ctx: Context): void {

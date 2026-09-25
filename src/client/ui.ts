@@ -37,15 +37,14 @@ export interface PickerRoster {
 export interface MakeUiOptions {
   React: ReactLike
   picker: PickerDeps
+  Menu: unknown
 }
 
 const THEME = {
-  subtleFill: 'var(--dsw-alias-fill-quaternary)',
+  subtleFill: 'var(--dsw-alias-interactive-bg-hover)',
   labelPrimary: 'var(--dsw-alias-label-primary)',
   labelSecondary: 'var(--dsw-alias-label-secondary)',
-  border: 'var(--dsw-alias-stroke-quaternary)',
-  surface: 'var(--dsw-alias-surface-raised, var(--dsw-elevation-surface-raised))',
-  shadow: 'var(--dsw-elevation-shadow-2, 0 4px 16px rgba(0,0,0,.12))',
+  border: 'var(--dsw-alias-border-l2)',
   danger: 'var(--dsw-alias-state-error-primary)',
 } as const
 
@@ -55,21 +54,11 @@ function getRuntime(): MakeUiOptions {
   return RUNTIME
 }
 
-/** 弹层遮罩（点空白关闭）。 */
-function Backdrop({ onClose }: { onClose: () => void }): unknown {
-  const { React } = getRuntime()
-  return React.createElement('div', {
-    onClick: onClose,
-    style: { position: 'fixed', inset: 0, zIndex: 90 },
-  })
-}
-
 /** 模式选择器（composer 工具行按钮 + 弹层）。 */
 function ModePickerButton(props: { sessionId?: string }): unknown {
-  const { React, picker } = getRuntime()
+  const { React, picker, Menu } = getRuntime()
   const { useState } = React
   const [open, setOpen] = useState(false)
-  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null)
   const [rows, setRows] = useState<readonly PresetRow[] | null>(null)
   const [modeSelection, setModeSelection] = useState(true)
   const [loading, setLoading] = useState(false)
@@ -97,13 +86,11 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
     }
   }
 
-  const toggle = (ev: { currentTarget: { getBoundingClientRect(): DOMRect } }): void => {
+  const toggle = (): void => {
     if (open) {
       setOpen(false)
       return
     }
-    const rect = ev.currentTarget.getBoundingClientRect()
-    setAnchor({ left: rect.left, top: rect.bottom + 6 })
     setOpen(true)
     setNotice(null)
     void load()
@@ -124,9 +111,7 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
   }
 
   const h = React.createElement
-  const children: unknown[] = []
-
-  children.push(h('button', {
+  const anchor = h('button', {
     key: 'btn',
     title: '切换会话模式（Agent preset）',
     disabled: busy,
@@ -145,91 +130,44 @@ function ModePickerButton(props: { sessionId?: string }): unknown {
       fontSize: 14,
       opacity: busy ? 0.6 : 1,
     },
-  }, '🔄'))
+    'aria-label': '切换会话模式',
+    'aria-haspopup': 'menu',
+    'aria-expanded': open,
+    type: 'button',
+  }, '⇄')
+
+  const items: { id: string; label: unknown; disabled?: boolean }[] = []
+  if (loading) items.push({ id: '$loading', label: '加载模式列表…', disabled: true })
+  if (error) items.push({ id: '$error', label: error, disabled: true }, { id: '$retry', label: '重试' })
+  if (!loading && rows?.length === 0) items.push({ id: '$empty', label: '没有可用模式', disabled: true })
+  if (!loading && rows) for (const row of rows) {
+    const title = row.name && row.name !== row.id ? row.name + '（' + row.id + '）' : row.id
+    items.push({ id: row.id, disabled: !!row.broken || busy, label: h('div', {
+      style: { whiteSpace: 'normal', overflowWrap: 'anywhere', maxWidth: 300, padding: '4px 2px' },
+    }, h('div', { style: { fontWeight: 600 } }, title, row.isDefault ? ' · 默认' : '', row.broken ? ' · 已损坏' : ''),
+    row.description ? h('div', { style: { color: THEME.labelSecondary, fontSize: 12, marginTop: 3 } }, row.description) : null) })
+  }
+  const children: unknown[] = [h(Menu, {
+    key: 'menu', anchor, items, open, portal: true, autoFocus: true, side: 'top', align: 'end',
+    listClassName: 'dshPresetMenu',
+    onClose: () => setOpen(false),
+    onSelect: (id: string) => id === '$retry' ? load() : select(id),
+    footer: h('div', { style: { padding: '8px 10px', maxWidth: 300, color: THEME.labelSecondary, fontSize: 12 } },
+      !modeSelection ? '部署已关闭新会话模式选择；此处仍可切换当前会话。' : '切换当前会话模式；已有历史会保留。'),
+  }), h('style', { key: 'style' }, `
+    .dshPresetMenu.dshPresetMenu {
+      background: var(--dsw-alias-bg-layer-1);
+      border: 1px solid var(--dsw-alias-border-l2);
+      min-width: min(300px, calc(100vw - 24px));
+      max-width: min(360px, calc(100vw - 24px));
+    }
+  `)]
 
   if (notice) {
     children.push(h('span', {
       key: 'notice',
       style: { marginLeft: 6, fontSize: 12, color: THEME.labelSecondary },
     }, notice))
-  }
-
-  if (open && anchor) {
-    const panel: unknown[] = []
-    if (loading) panel.push(h('div', { key: 'loading', style: { padding: 8, color: THEME.labelSecondary } }, '加载模式列表…'))
-    if (error) panel.push(h('div', { key: 'error', style: { padding: 8, color: THEME.danger, fontSize: 12 } }, error))
-    if (!loading && rows && rows.length === 0) {
-      panel.push(h('div', { key: 'empty', style: { padding: 8, color: THEME.labelSecondary } }, '没有可用模式（请检查 agent preset 配置）'))
-    }
-    if (!modeSelection) {
-      panel.push(h('div', { key: 'modesel-off', style: { padding: '6px 8px', color: THEME.labelSecondary, fontSize: 12 } },
-        '部署已关闭「模式选择」：新会话固定用默认模式，切换只对当前会话生效。'))
-    }
-    if (!loading && rows) {
-      for (const row of rows) {
-        const disabled = row.broken || busy
-        const title = row.name && row.name !== row.id
-          ? `${row.name}（${row.id}）`
-          : row.id
-        panel.push(h('button', {
-          key: row.id,
-          disabled,
-          onClick: () => void select(row.id),
-          style: {
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '8px 10px',
-            border: 'none',
-            background: 'transparent',
-            color: THEME.labelPrimary,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            opacity: disabled ? 0.5 : 1,
-            fontSize: 13,
-            lineHeight: 1.4,
-          },
-        },
-          h('span', { style: { fontWeight: 600 } },
-            title,
-            row.broken ? ' — 已损坏' : '',
-            row.isDefault ? ' — 默认' : ''),
-          row.description
-            ? h('div', { style: { color: THEME.labelSecondary, fontSize: 12, marginTop: 2 } }, row.description)
-            : null,
-        ))
-      }
-    }
-    panel.push(h('div', {
-      key: 'footer',
-      style: {
-        padding: '6px 10px',
-        borderTop: `1px solid ${THEME.border}`,
-        color: THEME.labelSecondary,
-        fontSize: 11,
-      },
-    }, '提示：会话未开始时可就地切换；已开始时会改为设定默认模式'))
-
-    children.push(
-      h(Backdrop, { key: 'bd', onClose: () => setOpen(false) }),
-      h('div', {
-        key: 'panel',
-        style: {
-          position: 'fixed',
-          left: Math.max(8, anchor.left),
-          top: anchor.top,
-          zIndex: 100,
-          minWidth: 260,
-          maxWidth: 340,
-          maxHeight: 340,
-          overflowY: 'auto',
-          background: THEME.surface,
-          border: `1px solid ${THEME.border}`,
-          borderRadius: 8,
-          boxShadow: THEME.shadow,
-          padding: 4,
-        },
-      }, ...panel),
-    )
   }
 
   return h('div', { style: { display: 'inline-flex', alignItems: 'center', marginRight: 4 } }, ...children)

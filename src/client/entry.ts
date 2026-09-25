@@ -92,7 +92,8 @@ export function factory(require: RequireFn): unknown {
         },
       }
 
-      const ui = makeUi({ React, picker })
+      const { Menu } = require('@deepseek-ai/dsh-client-ui-primitives') as { Menu: unknown }
+      const ui = makeUi({ React, picker, Menu })
       slots.inject('conversation.input.right', () =>
         slots.register(
           {

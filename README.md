@@ -78,3 +78,7 @@ npm test               # 冒烟 + switch 逻辑单测
 ## Windows / Ubuntu 共用目录
 
 本项目遵循 [DeepSeek 共用目录约定](../dsh-agent-presets/docs/DIRECTORY-LAYOUT.md)。管理根统一写作 `<DEEPSEEK_ROOT>`（`.../deepseek/`），历史部署记录不能视为当前机器状态；Bash/systemd 命令只适用于对应环境，配置文件中的路径须在本机解析。
+
+## 0.4.1 · 2026-09-25
+
+使用 DSH 原生 Menu，向上展开、右缘对齐、portal 避免裁剪；恢复主题背景、键盘导航、焦点返回。 见 [修复规格](docs/specs/20260925-native-entry-ui/spec.md)。

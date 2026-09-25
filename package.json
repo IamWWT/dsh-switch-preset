@@ -1,6 +1,6 @@
 {
   "name": "dsh-switch-preset",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "DSH 会话模式切换：/switch-preset 在当前会话切换 Agent preset（空会话正规切换；已开始会话强制重装配），/list-preset 查看模式 id 与中文描述。",
   "keywords": [
     "dsh",
@@ -55,8 +55,8 @@
     "build": "node scripts/build.mjs --no-typecheck",
     "build:full": "node scripts/build.mjs",
     "typecheck": "node scripts/typecheck.mjs",
-    "test": "node test/smoke-test.mjs && node test/switch-test.mjs",
-    "check": "node scripts/build.mjs && node test/smoke-test.mjs && node test/switch-test.mjs",
+    "test": "node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs",
+    "check": "node scripts/build.mjs && node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs",
     "pack": "npm pack",
     "install:dev": "bash scripts/install-to-dsh.sh"
   }
