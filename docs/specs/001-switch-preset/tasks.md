@@ -8,6 +8,14 @@ owner: AI
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：规格 001（切换语义基线，已交付）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # Tasks 001 — /switch-preset 任务拆解
 
 > 每任务三要素：改动文件 / done 定义 / 如何验证。粒度 = 一次逻辑改动（一个 commit，中文 message）。

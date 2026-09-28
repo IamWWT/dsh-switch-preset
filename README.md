@@ -1,8 +1,13 @@
 # dsh-switch-preset
 
-DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会话内**切换 Agent preset（DSH 的"会话模式"），并用 `/list-preset` 查看可填写的模式 id 与中文描述。
+DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会话内**切换 Agent preset（DSH 的"会话模式"），用 `/list-preset` 查看可填写的模式 id 与中文描述，用 `/router-preset <你的原话>` **按概率自动判定该切哪个模式**并接着把你的原话在该模式下继续。
 
-> 版本: 0.4.0 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> 版本: 0.5.0 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> v0.5.0（2026-09-28）：新增 **`/router-preset` 概率路由**——对全部可用模式算出命中概率分布，
+> 概率最高者 ≥ 阈值（默认 **0.6**）即自动切换，并把你的原话作为**切换后模式下**的输入继续；
+> 低于阈值只展示概率分布、**不切换**（避免低置信度切错模式）。概率引擎可插拔（当前本地确定性打分，
+> 后续可接入 JEV 类模型输出）。
+> v0.4.1（2026-09-25）：模式菜单改用 **DSH 原生 Menu**（向上展开、右缘对齐、portal 避免裁剪），恢复主题背景、键盘导航、焦点返回；
 > v0.4.0（2026-09-23）：**harness 0.1.7 原地对齐**（roster 字段/策略对象、默认模式写入目标改为
 > `agent-preset-registry.selectedDefault`、尊重 `modeSelectionEnabled`、命令改二级注入）；
 > v0.3.0（2026-09-18）：对已开始会话支持 **recompose 强制切换**（含历史原地换模式）。语义演进见 `CHANGELOG.md` 与 `docs/REQUIREMENTS.md`。
@@ -14,8 +19,35 @@ DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会�
 | `/list-preset` | 列出全部可用模式：**中文名（preset id）** + **中文描述**，并标注「当前会话」「默认」与损坏项；同时给出用法提示 |
 | `/switch-preset`（无参） | 等同 `/list-preset` |
 | `/switch-preset <id>` | 切换当前会话模式（语义见下表），**留在当前会话** |
+| **`/router-preset <你的原话>`** | **概率路由**：对全部模式算命中概率 → 最高者 ≥0.6 就自动切换 → 你的原话在**切换后模式**下继续交互；<0.6 只展示分布 + 提示，不切换 |
 | id 从哪来 | 直接复制 `/list-preset` 里括号中的 id（如 `engineering`、`research`） |
-| composer 工具行「🔄」按钮 | 弹出模式列表（中文名 + 描述 + 默认标注），点选即执行 `/switch-preset <id>` |
+| composer 工具行「⇄」按钮 | 弹出模式列表；**置顶项「⚡ 按内容自动判定模式」**＝对输入框当前内容执行 `/router-preset`，其余项点选即 `/switch-preset <id>` |
+
+### `/router-preset` 概率路由怎么工作（v0.5.0）
+
+```
+/router-preset 这个插件打包后加载报错，帮我改代码
+        ↓ ① 概率判定（本地确定性打分：关键词/意图加权 → 归一化为概率分布）
+   工程模式 98.4% ★ ｜ 学习/办公/研究/排障/视频 各 0.3%
+        ↓ ② 98.4% ≥ 阈值 60% → 自动切换（复用 /switch-preset 的切换语义）
+        ↓ ③ 客户端把原话作为「工程模式」下的普通用户消息继续发出
+```
+
+- **不给答案时就给概率**：任何输入都会输出 6 个模式的完整概率分布（含命中词，可解释），
+  取概率最高者作为切换目标。
+- **低置信度不乱切**：最高概率 < 0.6 时**不切换**，只展示分布并提示
+  `如确认切到 X：/switch-preset <id>`。
+- **切换失败不投递**：若切换报错，原话**不会**发出（避免在原模式下误跑），并明确告知原因。
+- **投递在 Host 侧完成**（上游契约决定，2026-09-28 实测结论）：DSH 命令 handler 本身
+  "不把内容发给模型"（只返回文本），`CommandResult` 也只有 `{kind,text,sourceEventSeq}`；
+  而客户端**没有公开钩子**能观察"用户键入的命令"的结果（`conversation.composer.bar` 的
+  `hooks.notices` 是 package-private 且插槽为 single 已被占用）。因此投递由 Host 侧
+  core 服务 `sessionController.prompt({mode:'queue'})` 完成——**插件不调用任何模型 API**，
+  只是把一条用户输入放进会话，由 DSH 自己的 agent 循环在新模式下处理。
+  会话日志里它就是一条 `role:"user"` 的普通用户消息。
+- **概率引擎可插拔**：`ModeScorer` 接口是唯一打分入口；当前实现 `local-keyword-v1`
+  （零依赖、离线可用、可单测），将来接入 JEV 类模型只需提供同一接口的新实现，
+  命令层与客户端**零改动**（见 `src/host/router.ts` 的接口注释）。
 
 ## 切换语义（v0.2.0：留在当前会话）
 
@@ -33,23 +65,38 @@ DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会�
 ## 复用的 DSH 框架能力（不重造轮子）
 
 - `ctx.commands`：两条斜杠指令的注册/分发/执行记录（不产生模型消息）
-- `ctx.agentPresets.list()`：模式清单 + 中文名/描述 + 默认标注 + 健康度（roster 单一真源）
+- `ctx.agentPresets.remoteExportList()`：模式清单 + 中文名/描述 + 默认标注 + 健康度 + 模式选择开关（roster 单一真源）
 - `ctx.agentPresets.select()`：空会话就地换模式（复用框架自带的锁定判定）
-- `ctx.settings.update('agent-presets', { default })`：写官方"默认模式"（已开始会话的降级路径）
+- `ctx.settings.mutate('agent-preset-registry', [{ op: 'set', path: ['selectedDefault'], value: id }], revision)`：写官方"默认模式"（已开始会话的降级路径）
 - session 投影 `agentPreset`：识别当前会话模式（列表标注用）
 - 客户端 `remote.agentPresets.list` / `remote.commands.execute`：选择器数据源与命令复用通道
 
-## 安装（开发期，源码 link）
+## 环境支持矩阵（2026-09-26 双环境约定，总约定见 [`../docs/ENV-COMPATIBILITY.md`](../docs/ENV-COMPATIBILITY.md)）
+
+| 环境 | ubuntu-4090 | windows-lite |
+|---|---|---|
+| `dsh-switch-preset` | 全量 | 全量 |
+
+纯 TypeScript Host + Client 插件：运行时只依赖 `node:*` 与 DSH 服务（`commands` / `agentPresets` /
+`settings` / `slots` / `remote.*`），无本地模型、无数据库、无 OS 分支（`process.platform` /
+主机名 / 绝对 unix 路径一概不用），持久状态全部落在 DSH 自身（session 事件、settings），
+因此两个环境行为一致（依据见 `../docs/ENV-COMPATIBILITY.md` §3）。
+
+## 安装（tgz，2026-09-23 起唯一方式）
 
 ```bash
-npm run check     # 构建门禁 + 双端 typecheck + 冒烟 + 逻辑单测
-
-# 一键安装到指定 DSH 实例（必须显式给 TARGET_DSH_HOME，防误装生产）
-TARGET_DSH_HOME=<目标 DSH_HOME> HARNESS_DIR=<harness 目录> npm run install:dev
+cd dsh-plugins/dsh-switch-preset
+pnpm check          # 构建门禁 + 双端 typecheck + 冒烟 + 逻辑单测（自持可跑）
+npm pack            # 产出 dsh-switch-preset-<version>.tgz
+dsh-dev plugin --profile web add /abs/path/dsh-switch-preset-<version>.tgz
 
 # 装到 3082 后（征得同意再重启）
 systemctl --user restart dsh-dev-web
 ```
+
+**安装纪律**：本插件只用 tgz 安装，不用源码 link（link 会让"磁盘新/进程旧"、依赖借外部目录，
+难以察觉）；**每次重打包必须升版本号**——同版本重打包时 pnpm 按 lockfile `integrity` 判定
+"已最新"而不会重新解压。
 
 **环境注意**：本机根挂载当前为只读（`errors=remount-ro`）时 `~/.dsh-dev` 不可写，安装会 EROFS；
 pnpm store 落在只读区时用 `PNPM_HOME=<可写目录>` 绕行。详见 `docs/TROUBLESHOOTING.md` §2。
@@ -68,7 +115,7 @@ npm test               # 冒烟 + switch 逻辑单测
 ## 已知限制
 
 - **已开始会话换 preset 会更换工具集**：历史中旧模式独有的工具调用可能无法在新模式下解析（DSH 默认禁止换 preset 的原因）；本插件在用户显式要求下走 `recompose` 强制切换，成功文案附此提示。
-- 写默认模式需要 `settings` 服务；该服务缺失时指令会明确报错而非静默成功。
+- 写默认模式需要 `settings` 服务；该服务缺失时指令会明确报错而非静默成功。部署关闭「模式选择」开关（`agent-preset-registry.modeSelectionEnabled=false`）时写默认模式不生效，指令同样明确报错并说明恢复办法（新建会话或先在设置里打开开关）。
 - 模式的中文名/描述来自各 preset 的 `preset.yml`（`name`/`description`）；未填写则只显示 id。
 - 指令仅在交互式 Web 界面可用（`commands` 服务在无 UI 组合中不存在）。
 
@@ -78,7 +125,3 @@ npm test               # 冒烟 + switch 逻辑单测
 ## Windows / Ubuntu 共用目录
 
 本项目遵循 [DeepSeek 共用目录约定](../dsh-agent-presets/docs/DIRECTORY-LAYOUT.md)。管理根统一写作 `<DEEPSEEK_ROOT>`（`.../deepseek/`），历史部署记录不能视为当前机器状态；Bash/systemd 命令只适用于对应环境，配置文件中的路径须在本机解析。
-
-## 0.4.1 · 2026-09-25
-
-使用 DSH 原生 Menu，向上展开、右缘对齐、portal 避免裁剪；恢复主题背景、键盘导航、焦点返回。 见 [修复规格](docs/specs/20260925-native-entry-ui/spec.md)。

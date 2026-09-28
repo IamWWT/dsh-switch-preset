@@ -33,7 +33,7 @@ else
         if ! grep -Fq "$rel" "$INDEX"; then
             say_err "FILE_INDEX.md 未收录: $rel"
         fi
-    done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -print0)
+    done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -not -path "$ROOT/test-home/*" -not -path "$ROOT/lib-test/*" -print0)
 fi
 
 echo "== 2. 相对链接检查 =="
@@ -59,7 +59,7 @@ while IFS= read -r -d '' f; do
             say_err "断链: $rel -> $target"
         fi
     done <<< "$links"
-done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -print0)
+done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -not -path "$ROOT/test-home/*" -not -path "$ROOT/lib-test/*" -print0)
 
 echo "== 3. 占位符检查（{{...}}）=="
 while IFS= read -r -d '' f; do
@@ -73,7 +73,7 @@ while IFS= read -r -d '' f; do
     if grep -qE '\{\{' "$f" 2>/dev/null; then
         say_err "存在未替换占位符 {{...}}: $rel"
     fi
-done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -print0)
+done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -not -path "$ROOT/test-home/*" -not -path "$ROOT/lib-test/*" -print0)
 
 echo "== 4. Frontmatter 检查（正式文档）=="
 while IFS= read -r -d '' f; do
@@ -96,7 +96,7 @@ while IFS= read -r -d '' f; do
                 if [ -n "$missing" ]; then say_err "frontmatter 缺字段$missing: $rel"; fi
             fi ;;
     esac
-done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -print0)
+done < <(find "$ROOT" -name '*.md' -not -path "$ROOT/_framework-archive/*" -not -path "$ROOT/node_modules/*" -not -path "$ROOT/test-home/*" -not -path "$ROOT/lib-test/*" -print0)
 
 echo ""
 echo "== 5. system prompt 体量检查（铁律 16）=="

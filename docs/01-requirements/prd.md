@@ -8,6 +8,14 @@ owner: 用户 + AI
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：需求规格（PRD）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # PRD — dsh-switch-preset（会话模式切换插件）
 
 > 版本: v1.0.0 | 状态: Draft | 创建: 2026-09-16 | 维护人: AI + 用户

@@ -8,6 +8,14 @@ owner: AI + 用户
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：排障知识库（现象→根因→修复→教训）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # TROUBLESHOOTING — 现象 → 根因 → 修复 → 预防
 
 > 本文件同时记录 DSH 框架 API 的**版本基线**（升级 deepseek-harness 后按此核对，

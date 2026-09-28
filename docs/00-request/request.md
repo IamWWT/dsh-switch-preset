@@ -8,6 +8,14 @@ owner: 用户 + AI
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：原始需求基线（用户原话 + 假设表）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # 需求摄入 — dsh-switch-preset
 
 ## 目标项目

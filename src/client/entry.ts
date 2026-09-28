@@ -8,7 +8,7 @@
  *
  * sessionId 经注册时 inject 工厂的位置参数取得（framework-resolved），不是 standard prop。
  */
-import { COMMAND_NAME } from '../shared/contracts.ts'
+import { COMMAND_NAME, ROUTER_COMMAND_NAME } from '../shared/contracts.ts'
 import { makeUi, type PickerDeps } from './ui.ts'
 
 declare global {
@@ -25,6 +25,20 @@ type RpcResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: fa
 function unwrap<T>(result: RpcResult<T>): T {
   if (result.ok) return result.value
   throw new Error(result.error.message || result.error.code || 'remote call failed')
+}
+
+
+/** 从命令执行结果中提取文本（兼容 CommandExecution 包裹与裸 CommandResult）。 */
+function extractCommandText(result: unknown): string | undefined {
+  if (result === null || typeof result !== 'object') return undefined
+  const asRecord = result as Record<string, unknown>
+  const inner = asRecord.result
+  if (inner !== null && typeof inner === 'object') {
+    const text = (inner as Record<string, unknown>).text
+    if (typeof text === 'string') return text
+  }
+  if (typeof asRecord.text === 'string') return asRecord.text
+  return undefined
 }
 
 interface RemoteCommands {
@@ -90,6 +104,12 @@ export function factory(require: RequireFn): unknown {
           const line = `/${COMMAND_NAME} ${presetId}`
           unwrap(await withTimeout(remoteCommands.execute(sessionId, line, []), 10000, '执行切换'))
         },
+        // v0.5.0 概率路由（方案 B：命令只判定+切换，客户端负责把原话作为普通用户消息补发）
+        routeByUtterance: async (sessionId, utterance) => {
+          const line = `/${ROUTER_COMMAND_NAME} ${utterance}`
+          const raw = unwrap(await withTimeout(remoteCommands.execute(sessionId, line, []), 20000, '路由判定'))
+          return extractCommandText(raw)
+        },
       }
 
       const { Menu } = require('@deepseek-ai/dsh-client-ui-primitives') as { Menu: unknown }
@@ -100,6 +120,8 @@ export function factory(require: RequireFn): unknown {
             name: 'conversation.input.right',
             id: 'dsh-switch-preset',
             order: 10,
+            // 仅需 sessionId；草稿经组件 props 的 standard hook `useInput` 读取
+            // （框架对 session 作用域插槽自动注入），投递在 Host 侧完成、客户端不接力。
             inject: (sessionId: string) => ({ sessionId }),
           },
           ui.ModePickerButton as never,

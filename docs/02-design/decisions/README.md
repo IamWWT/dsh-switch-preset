@@ -8,6 +8,14 @@ owner: AI + 维护人
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：ADR 索引
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # ADR — 架构决策记录
 
 ## 什么时候写 ADR

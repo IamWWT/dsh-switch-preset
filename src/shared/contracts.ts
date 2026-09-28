@@ -67,6 +67,13 @@ export interface AgentPresetsLike {
   recompose?(agentCtx: unknown, presetId: string): Promise<PresetRow>
 }
 
+/** 原话投递结果（把用户原话作为切换后模式下的后续输入交给 agent）。 */
+export interface DeliveryOutcome {
+  readonly ok: boolean
+  /** 面向用户的说明（成功/失败原因），由命令回显拼接展示。 */
+  readonly message: string
+}
+
 /** 切换依赖集合（实现层注入真实服务，纯逻辑层只认接口）。 */
 export interface SwitchDeps {
   readonly agentPresets: AgentPresetsLike
@@ -77,6 +84,20 @@ export interface SwitchDeps {
   readonly writeDefaultPreset?: (presetId: string) => Promise<void>
   /** 读取当前会话已生效的 agentPreset（列表展示用）；读不到返回 undefined。 */
   readonly currentPreset?: (agent: AgentLike) => Promise<string | undefined>
+  /**
+   * v0.5.0：把用户原话投递为该 agent 会话的**后续输入**（`/router-preset` 的第③步）。
+   *
+   * 为什么在 Host 侧投递（2026-09-28 实测结论，取代原「客户端接力」方案）：
+   * 上游命令契约明确 handler "不把命令发给模型"
+   * （`packages/interaction/commands/src/index.ts`），`CommandResult` 也只有
+   * `{kind,text,sourceEventSeq}`；而客户端**没有公开钩子**能观察"用户键入的命令"的执行结果
+   * （`conversation.composer.bar` 的 `hooks.notices` 标注为 package-private 且插槽为 single），
+   * 因此"客户端解析结果再补发"只能覆盖插件自己发起的调用，覆盖不了用户直接键入
+   * `/router-preset xxx` 的主路径。故投递在 Host 侧完成（core 服务 sessionController.prompt，
+   * 与 dsh-report-studio 的生成通道同一范式，不调用任何模型 API）。
+   * 不可用时为 undefined → 调用方必须如实告知"未投递"，不得假报成功。
+   */
+  readonly deliverUtterance?: (agent: AgentLike, utterance: string) => Promise<DeliveryOutcome>
 }
 
 /** 命令统一结果（对齐 0.1.7 CommandResult：success 可带 text，error 必须带 text）。 */
@@ -89,6 +110,13 @@ export const COMMAND_NAME = 'switch-preset'
 
 /** 列表指令名：查看 /switch-preset 应填写的 preset id 及中文描述。 */
 export const LIST_COMMAND_NAME = 'list-preset'
+
+/**
+ * 概率路由指令名（v0.5.0，用户 2026-09-28 需求）：
+ * `/router-preset <用户原话>` = 概率判定 → 达阈值切换 → 原话在切换后模式下继续交互。
+ * 客户端需要识别这条命令的结果并执行"接力发送"（见 host/route.ts 的标记契约）。
+ */
+export const ROUTER_COMMAND_NAME = 'router-preset'
 
 /**
  * 内置 preset 注册表条目 id（0.1.7 从 `@deepseek-ai/dsh-web-app` 的 patch 层挂载）。

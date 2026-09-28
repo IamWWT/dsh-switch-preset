@@ -8,6 +8,14 @@ owner: AI + 用户
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：架构决策记录（ADR）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # ADR-002 — 已开始会话换模式：recompose 强制重装配
 
 > 取代 ADR-001（fork/create 进新会话方案，v0.3.0 起废弃，已删除）。

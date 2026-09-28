@@ -8,6 +8,14 @@ owner: AI + 用户
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：测试与验证证据
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # recompose 强制切换生产实证（2026-09-21）
 
 **会话**：`session-f6101952`（agentscope-java 2.0 记忆讲解视频，`~/.dsh-dev`）

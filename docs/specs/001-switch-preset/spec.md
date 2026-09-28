@@ -8,6 +8,14 @@ owner: AI + 用户
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：规格 001（切换语义基线，已交付）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # Spec 001 — /switch-preset 会话模式切换
 
 ## 头部元信息

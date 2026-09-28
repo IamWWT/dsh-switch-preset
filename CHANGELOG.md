@@ -1,5 +1,52 @@
 # CHANGELOG
 
+## 0.5.0（2026-09-28）— `/router-preset` 概率路由：判定 → 切换 → 原话投递
+
+- **需求原话**（用户 2026-09-28）：「如果不给答案可以给出判定某个模式命中的概率，概率第一高的就是要切换的
+  类似 jev 模型」+「就是落到 /router-preset xxx 这个指令里面。等于是这条指令触发 preset 概率判定 +
+  switch preset 操作 + 用户原本内容在切换后的 preset 模式下的后续输入 agent 交互」。
+- **新增 `/router-preset <你的原话>`**（Host 命令）：
+  1. **概率判定**：对 roster 中全部可用模式算出命中概率分布（归一化 sum=1，按概率降序），
+     输出含每个模式的命中词（可解释，非黑箱）；
+  2. **阈值决策**：Top-1 概率 ≥ **0.6**（`DEFAULT_ROUTE_THRESHOLD`）→ 切换；
+     < 0.6 → **不切换**，只展示分布并提示 `如确认切到 X：/switch-preset <id>`（避免低置信度切错模式）；
+  3. **切换**：**复用** `switchPreset()`（切换语义单一真源：select → recompose → 写默认四级降级），
+     本版本不复制切换逻辑；
+  4. **原话投递（Host 侧）**：切换成功后由 core 服务
+     `sessionController.prompt({mode:'queue', content:[{type:'text',text:原话}]})`
+     把原话投进该会话的用户输入队列；会话日志里是一条 `role:"user"` 的普通用户消息，
+     随后 `turn/start` 在新模式下处理它（实测见下）。
+     **为何不用"客户端接力"**（最初设想，已推翻）：客户端没有任何公开钩子能观察
+     "用户键入的命令"结果（`hooks.notices` 属 package-private 且 composer 插槽为 single），
+     客户端接力只能覆盖插件自己发起的调用，覆盖不了用户直接键入 `/router-preset xxx` 的主路径。
+- **概率引擎可插拔（JEV 接入点）**：`ModeScorer` 接口是唯一打分入口；当前实现
+  `LocalModeScorer`（engine id `local-keyword-v1`）：强特征表（人工提炼高区分度动作/交付物词，权重 3）
+  + 从各模式 name/description 自动派生的弱特征（权重 1）+ 均匀先验，归一化为概率。
+  将来接入 JEV 类模型只需实现同一接口（`score(candidates, utterance, threshold) → ScoreBoard`），
+  命令层与客户端**零改动**。
+- **上游契约依据**（`deepseek-harness` 源码，非猜测）：
+  - `packages/interaction/commands/src/index.ts`：`CommandDefinition.handler` 注释明确
+    "Execute against the receiving agent **without sending the command to the model**"，
+    且 `CommandResult` 仅 `{kind, text, sourceEventSeq}`（不可扩展）→ 这是"投递必须另起一次
+    prompt 调用"的原因；`sessionController` 正是该调用唯一公开通道。
+  - `packages/client/ui-conversation/src/client/contract/slots.ts`：`SessionStandardProps.inputActions`
+    （`setDraft` + `submit`）是会话作用域插槽可用的公开输入通道。
+- **客户端 UI**：composer 工具行「⇄」弹层**置顶新增**「⚡ 按内容自动判定模式」
+  （取输入框当前内容作为原话执行路由）；未达阈值时在同一位置展示概率明细（说明"为什么没切"）。
+- **3084 实测（2026-09-28，含真实 6 模式 + agent-presets 实体）**：键入
+  `/router-preset 帮我把这个项目做成一个演示视频，需要配音和字幕` →
+  判定「视频模式 80.3%（命中：视频、配音、字幕、演示视频、项目、演示）」→
+  `agent-preset/selected{agentPreset:video}` → `agent/inbox/spliced`（原话以 `role:"user"` 入队）→
+  `turn/start` + `system/message` 显示**视频模式**人设 → `user/message` 为原话原文。
+  唯一 `turn/end` 错误为 `MISSING_CREDENTIAL`（测试 home 未配 API key，属环境）。
+- **冒烟/单测**：新增 `test/router-test.mjs` **15 项**（概率分布归一与降序、四类输入的判别力、
+  阈值行为、达阈值→切换+投递原话、未达阈值→零副作用、切换失败→不投递、通道缺失/被拒/抛错三态、
+  无判别力时不推荐任意模式、空原话报用法）；`pnpm check` 全绿（构建门禁 + 双 tsconfig + 4 个测试文件）。
+
+## 0.4.1（2026-09-25）— 模式菜单改用 DSH 原生 Menu
+
+- 弹层改用框架 `Menu`（向上展开、右缘对齐、portal 避免裁剪），恢复主题背景、键盘导航与焦点返回。
+
 ## 0.4.0（2026-09-23）— harness 0.1.7 原地对齐（无兼容垫片）
 
 - **背景**（用户原话）：「因为新版本的dsh preset模式管理方式变了…一定要贴和dsh现在能力，不要补丁，要原地更新」；

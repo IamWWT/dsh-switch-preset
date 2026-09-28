@@ -2,8 +2,8 @@
 title: FILE_INDEX - 文件索引
 type: index
 status: active
-version: 2.0.0
-date: 2026-09-21
+version: 2.1.0
+date: 2026-09-26
 owner: AI + 维护人
 applies_to: dsh-switch-preset
 ---
@@ -11,12 +11,14 @@ applies_to: dsh-switch-preset
 # FILE_INDEX - 文件索引
 
 > 由 Agent 维护：每次新增/删除/移动文件后更新本表。
-> 更新: 2026-09-21 | 项目: dsh-switch-preset
+> 更新: 2026-09-26 | 项目: dsh-switch-preset
+> 2026-09-26 文档对齐审计：版本提及（README 0.4.1）、安装方式（tgz，无 link）、环境表述（环境支持矩阵）对齐；
+> 补录 specs/20260925-native-entry-ui 三件套、test/picker-test.mjs、scripts/paths.sh。
 > 2026-09-21 清理：移除 init 脚手架残留（MANUAL/prompts/语言模板/工程工具脚本/空壳占位/无效 ADR-001 与临时实例产物 test-home），实证归档 docs/05-testing/。
 
 ## 根目录
 
-- README.md - 项目总览（v0.3.0：留在当前会话 + /list-preset + recompose 强制切换）
+- README.md - 项目总览（v0.4.1：留在当前会话 + /list-preset + recompose 强制切换 + 原生 Menu 选择器）
 - AGENTS.md - Agent 工作协议（单一入口）
 - MEMORY.md - 当前状态/待办/硬约束
 - LICENSE - Apache License 2.0
@@ -56,6 +58,10 @@ applies_to: dsh-switch-preset
 - docs/specs/001-switch-preset/spec.md - 规格 001（AC-1~AC-16，用户已确认）
 - docs/specs/001-switch-preset/plan.md - 技术规划 001
 - docs/specs/001-switch-preset/tasks.md - 任务拆解 001（T1~T6）
+- docs/specs/002-router-preset/spec.md - 规格 002（/router-preset 概率路由，已交付 v0.5.0，含实测证据与未决项）
+- docs/specs/20260925-native-entry-ui/spec.md - 规格 20260925（原生 Menu 入口交互修复，v0.4.1）
+- docs/specs/20260925-native-entry-ui/plan.md - 技术规划 20260925（Menu/portal 契约与回退）
+- docs/specs/20260925-native-entry-ui/tasks.md - 任务拆解 20260925（含未完成项：全量 check 与隔离实例验收）
 
 ## src/（源码）
 
@@ -71,12 +77,14 @@ applies_to: dsh-switch-preset
 
 - test/smoke-test.mjs - 冒烟（产物/版本四处同步/导出完整性）
 - test/switch-test.mjs - switch/list 纯逻辑 10 组单测（v1.2 矩阵：select/recompose/降级/报错链）
+- test/picker-test.mjs - 模式选择器（Menu 接线/弹层数据）单测
 
 ## scripts/（构建与安装）
 
 - scripts/build.mjs - 双端 esbuild + 产物门禁（host 导出/命令名/client 无顶层 import/export + node --check）
 - scripts/typecheck.mjs - 双 tsconfig --noEmit
-- scripts/install-to-dsh.sh - 一键安装（强制显式 TARGET_DSH_HOME；构建→测试→link→验证）
+- scripts/install-to-dsh.sh - 一键安装（强制显式 TARGET_DSH_HOME；构建→测试→按源码路径装→验证）
+- scripts/paths.sh - 共享 bash 路径解析（定位 deepseek-harness；不含机器专属路径）
 - scripts/doc-check.sh - 文档一致性检查（工程工具，AGENTS.md 引用）
 - scripts/quality-gate.sh - 质量门禁（工程工具，AGENTS.md 引用）
 - scripts/journal.sh - 进度日志（工程工具，AGENTS.md 引用）

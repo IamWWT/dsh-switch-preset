@@ -8,6 +8,14 @@ owner: AI + 用户
 applies_to: dsh-switch-preset
 ---
 
+## 当前状态
+
+- 文档性质：进度真源（当前版本/进行中/下一步）
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
 # PROGRESS — dsh-switch-preset 进度真源
 
 > 本文件是项目进度单一真源；工作区根 `progress.md` 只做链接索引。
@@ -53,6 +61,10 @@ applies_to: dsh-switch-preset
 - 同步：FILE_INDEX 重写 v2.0.0、AGENTS.md 断引用修正（P2 tasks 路径、P3 .env.example）、
   decisions/README.md 索引登记 ADR-002。doc-check / npm check / quality-gate 全绿。
 - 已推远程（私有 IamWWT/dsh-switch-preset）。
+
+## ✅ 已完成（最新一批，2026-09-26 追加）
+
+- **docs 对齐审计（2026-09-26）**：README 版本改 0.4.1 + 补「环境支持矩阵」（ubuntu-4090 / windows-lite 均全量）+ 安装节改 tgz（无 link）+ 框架能力条目改 `remoteExportList()` / `settings.mutate('agent-preset-registry', selectedDefault)`；FILE_INDEX 补录 specs/20260925 三件套 + picker-test + paths.sh（doc-check §1 由 3 错转绿）；architecture.md 注入清单/默认模式真源/调用链图对齐 0.1.7；AGENTS.md 安装红线与规范路径表述修正；specs/README.md 去掉已删 `_template/` 引用。仅改文档，未动代码。
 
 ## 🔄 进行中（中断点）
 

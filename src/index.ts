@@ -19,7 +19,7 @@
  *      （框架抛 `agent-preset/locked`，本插件显式放行并提示副作用）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { registerSwitchPresetCommands } from './host/command.ts'
+import { registerSwitchPresetCommands, type SessionControllerLike } from './host/command.ts'
 import type { PluginContext, SettingsLike } from './host/types.ts'
 
 /** 插件 id（bundle 注册名）。 */
@@ -35,7 +35,7 @@ export const name = 'dsh-switch-preset'
 export const inject: string[] = []
 
 /** 与 package.json version 同步（四处同步，改版本必同步本行）。 */
-export const VERSION = '0.4.1'
+export const VERSION = '0.5.0'
 
 /** 在 Web 交互式界面运行时注册 /switch-preset 与 /list-preset。 */
 export function apply(ctx: Context): void {
@@ -46,10 +46,22 @@ export function apply(ctx: Context): void {
     ctx.logger.info('[dsh-switch-preset] settings 服务已就绪（写默认模式可用）')
   })
 
+  // sessionController（core API 服务）：/router-preset 第③步把原话投递进会话的唯一通道。
+  // 同样惰性解析（晚于 apply 就绪也不影响；缺失时命令会如实报告"未投递"）。
+  let sessionController: SessionControllerLike | undefined
+  ctx.inject(['sessionController'], (scCtx) => {
+    sessionController = (scCtx as unknown as { sessionController: SessionControllerLike }).sessionController
+    ctx.logger.info('[dsh-switch-preset] sessionController 已就绪（/router-preset 可投递原话）')
+  })
+
   // 命令注册必须走二级注入（见文件头 v2.0）：拿到带 commands 的孩子上下文后用它注册，
   // disposer 随该注入生命周期回收。
   ctx.inject(['commands', 'agentPresets'], (commandCtx) => {
-    registerSwitchPresetCommands(commandCtx as unknown as PluginContext, () => settingsService)
+    registerSwitchPresetCommands(
+      commandCtx as unknown as PluginContext,
+      () => settingsService,
+      () => sessionController,
+    )
   })
 
   ctx.logger.info(`[dsh-switch-preset] v${VERSION} loaded`)

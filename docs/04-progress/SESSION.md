@@ -1,4 +1,31 @@
-# SESSION — 会话交接单（2026-09-17 首轮开发）
+# SESSION — 会话交接单
+
+## 当前状态
+
+- 文档性质：会话交接单
+- 对应版本：v0.5.0（2026-09-28）
+- 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
+- 维护者：AI + 用户
+
+
+> 交接协议：新会话先读本文件 + `docs/04-progress/PROGRESS.md`（✅/🔄/⏭），向用户复述后动手。
+
+## 🔄 进行中 / 上次进度
+
+0. **v0.5.0 概率路由 `/router-preset`（2026-09-28）**：
+   - 交付：`ModeScorer` 可插拔概率引擎 + `/router-preset` 三步流水（判定 → 切换 → 投递原话）+ 客户端置顶入口。
+   - 验证：`pnpm check` 全绿（`test/router-test.mjs` 15 项）；3084 隔离实例真实 6 模式环境
+     端到端实测通过（`agent-preset/selected{agentPreset:video}` + `agent/inbox/spliced` 原话入队 +
+     `system/message` 为视频模式人设）。证据链见 `docs/REQUIREMENTS.md` v0.5.0 条目。
+   - 关键设计结论：**投递必须在 Host 侧**（上游命令 handler 不发模型消息，客户端拿不到键入命令的结果）。
+   - 交付物：`dsh-switch-preset-0.5.0.tgz`（shasum 620acde2…；旧版 tgz 已按"只留一份"纪律删除）。
+
+## ⏭ 下一步 / 待确认
+
+- **3082 安装待用户授权**（`pnpm dsh plugin --profile web add <0.5.0 tgz>` + `systemctl --user restart dsh-dev-web`）。
+- 可选后续：把 `LocalModeScorer` 替换为 JEV 类模型的概率输出（`ModeScorer` 接口已就绪，命令层零改动）。
+
+---
 
 > 交接协议：新会话先读本文件 + `docs/04-progress/PROGRESS.md`（✅/🔄/⏭），向用户复述后动手。
 
