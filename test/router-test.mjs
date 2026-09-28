@@ -1,13 +1,15 @@
 /**
- * test/router-test.mjs — `/router-preset` 概率判定与接力契约单测（v0.5.0）
+ * test/router-test.mjs — `/router-preset` 概率判定与接力契约单测（v0.5.1）
  *
  * 覆盖（纯函数域，不需要 DSH 运行时）：
  *   1. 概率分布：6 模式全出、sum≈1、按概率降序；
  *   2. 判别力：明显属于某模式的输入，该模式概率显著最高（阈值可达）；
  *   3. 阈值行为：< 阈值不切换（无副作用）；
  *   4. 切换复用：达阈值时走 switchPreset（用假 deps 断言调用与结果）；
- *   5. 接力契约：达阈值且切换成功才产出标记；未达阈值/切换失败无标记；
- *   6. 标记解析：host 与 client 两端解析规则一致（含空内容、多标记、无标记）。
+ *   5. 接力契约：达阈值且切换成功才投递；未达阈值/切换失败不投递；
+ *   6. 投递三态：通道缺失/被拒/抛错都如实回显"未投递"；
+ *   7. **v0.5.1 可配参数**：`routerEnabled=false` 只判定不切换不投递（且明确说明已关闭）；
+ *      `routerThreshold` 可配且生效（回显一致）；非法阈值回落默认 0.6 且不崩。
  */
 import assert from 'node:assert/strict'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -64,7 +66,7 @@ const CANDIDATES = [
 const scorer = new LocalModeScorer()
 
 await check('概率分布：覆盖全部候选模式且 sum≈1、按概率降序', () => {
-  const board = scorer.score(CANDIDATES, '帮我写个周报', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '帮我写个周报', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(board.scores.length, CANDIDATES.length, '每个候选都要有概率')
   const sum = board.scores.reduce((s, x) => s + x.probability, 0)
   assert.ok(Math.abs(sum - 1) < 1e-9, `概率和应为 1，实际 ${sum}`)
@@ -75,29 +77,29 @@ await check('概率分布：覆盖全部候选模式且 sum≈1、按概率降�
 })
 
 await check('判别力：工程类输入 → engineering 概率最高且达阈值', () => {
-  const board = scorer.score(CANDIDATES, '这个插件打包后加载报错，帮我排查下代码里的 bug 并重新构建', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '这个插件打包后加载报错，帮我排查下代码里的 bug 并重新构建', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(board.top.id, 'engineering', `期望 engineering，实际 ${board.top.id}`)
   assert.ok(board.top.probability >= DEFAULT_ROUTE_THRESHOLD, `概率应达阈值，实际 ${board.top.probability}`)
   assert.ok(board.top.hits.length > 0, '应记录命中词（可解释）')
 })
 
 await check('判别力：视频类输入 → video 概率最高', () => {
-  const board = scorer.score(CANDIDATES, '把这个项目做成一个演示视频，需要配音和字幕', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '把这个项目做成一个演示视频，需要配音和字幕', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(board.top.id, 'video', `期望 video，实际 ${board.top.id}`)
 })
 
 await check('判别力：故障排查类输入 → troubleshooting 概率最高', () => {
-  const board = scorer.score(CANDIDATES, '线上服务 503 不可用，查日志和指标定位根因', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '线上服务 503 不可用，查日志和指标定位根因', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(board.top.id, 'troubleshooting', `期望 troubleshooting，实际 ${board.top.id}`)
 })
 
 await check('判别力：学习类输入 → learning 概率最高', () => {
-  const board = scorer.score(CANDIDATES, '教我理解一下这个概念，讲讲原理和区别', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '教我理解一下这个概念，讲讲原理和区别', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(board.top.id, 'learning', `期望 learning，实际 ${board.top.id}`)
 })
 
 await check('阈值行为：含糊输入不给高置信度（可能低于阈值）', () => {
-  const board = scorer.score(CANDIDATES, '帮我处理一下这个', DEFAULT_ROUTE_THRESHOLD)
+  const board = scorer.score(CANDIDATES, '帮我处理一下这个', { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   // 不做"必须不达阈值"的强断言（打分是启发式），只断言：概率仍归一、冠军存在、passesThreshold 与概率一致
   const sum = board.scores.reduce((s, x) => s + x.probability, 0)
   assert.ok(Math.abs(sum - 1) < 1e-9, '概率仍须归一')
@@ -134,7 +136,7 @@ const AGENT = { ctx: {}, session: { id: 's1', append: async () => {} } }
 await check('达阈值：执行切换（复用 switchPreset）并把原话投递给会话', async () => {
   const { deps, calls } = fakeDeps()
   const utterance = '这个插件打包后加载报错，帮我改代码'
-  const result = await routePreset(AGENT, utterance, deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, utterance, deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'success', `应为成功，实际 ${JSON.stringify(result)}`)
   assert.deepEqual(calls.select, ['engineering'], '空会话应走 select 切换')
   assert.ok(result.text.includes('已切换'), '结果应说明已切换')
@@ -145,7 +147,7 @@ await check('达阈值：执行切换（复用 switchPreset）并把原话投递
 await check('未达阈值：不产生切换副作用、不投递原话', async () => {
   const { deps, calls } = fakeDeps()
   // 构造一个必然低于阈值的场景：阈值设到 1（没有任何模式能达到）
-  const result = await routePreset(AGENT, '这个插件打包后加载报错', deps, scorer, 1)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错', deps, scorer, { routerThreshold: 1 })
   assert.equal(result.kind, 'success')
   assert.equal(calls.select.length, 0, '不得调用 select')
   assert.equal(calls.recompose.length, 0, '不得调用 recompose')
@@ -160,7 +162,7 @@ await check('切换失败：不投递原话（避免在原模式下误跑）', a
   failing.deps.agentPresets.select = async () => { throw Object.assign(new Error('locked'), { code: 'agent-preset/locked' }) }
   failing.deps.agentPresets.recompose = async () => { throw new Error('recompose failed') }
   delete failing.deps.writeDefaultPreset
-  const failed = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', failing.deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const failed = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', failing.deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(failed.kind, 'error', `切换失败应为 error，实际 ${JSON.stringify(failed)}`)
   assert.equal(failing.calls.delivered.length, 0, '切换失败不得投递原话（避免在原模式下误跑）')
   assert.ok(failed.text.includes('切换失败'), '应说明切换失败')
@@ -169,7 +171,7 @@ await check('切换失败：不投递原话（避免在原模式下误跑）', a
 await check('已开始会话 + recompose 可用：强制切换成功并投递原话', async () => {
   const { deps, calls } = fakeDeps()
   deps.agentPresets.select = async () => { throw Object.assign(new Error('locked'), { code: 'agent-preset/locked' }) }
-  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'success', `应成功，实际 ${JSON.stringify(result)}`)
   assert.deepEqual(calls.recompose, ['engineering'], '已开始会话应走 recompose')
   assert.deepEqual(calls.delivered, ['这个插件打包后加载报错，帮我改代码'], '切换成功必须投递原话')
@@ -178,21 +180,21 @@ await check('已开始会话 + recompose 可用：强制切换成功并投递原
 await check('损坏模式不参与判定（不得切到坏模式）', async () => {
   const withBroken = CANDIDATES.map(c => c.id === 'engineering' ? { ...c, broken: 'load failed' } : c)
   const { deps, calls } = fakeDeps({ roster: withBroken })
-  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.ok(!calls.select.includes('engineering'), '损坏模式不得被选中')
   assert.equal(result.kind, 'success')
 })
 
 await check('空原话：给出用法错误（不猜、不切）', async () => {
   const { deps, calls } = fakeDeps()
-  const result = await routePreset(AGENT, '   ', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '   ', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'error')
   assert.equal(calls.select.length, 0, '空输入不得触发切换')
 })
 
 await check('投递通道缺失：切换成功但如实告知"未投递"，不假报成功', async () => {
   const { deps } = fakeDeps({ noDelivery: true })
-  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'success', '切换本身成功，故整体仍是 success')
   assert.ok(result.text.includes('未投递'), '必须如实说明未投递')
   assert.ok(result.text.includes('手动重新发送'), '必须指导用户手动重发')
@@ -200,7 +202,7 @@ await check('投递通道缺失：切换成功但如实告知"未投递"，不�
 
 await check('投递被拒（accepted=false）：如实告知未投递并指导重发', async () => {
   const { deps, calls } = fakeDeps({ delivery: { ok: false, message: '会话未接受该输入' } })
-  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'success')
   assert.deepEqual(calls.delivered.length, 1, '投递被尝试过')
   assert.ok(result.text.includes('未投递') && result.text.includes('会话未接受该输入'))
@@ -209,9 +211,85 @@ await check('投递被拒（accepted=false）：如实告知未投递并指导�
 await check('投递抛错：不崩命令，如实回显失败原因', async () => {
   const { deps } = fakeDeps()
   deps.deliverUtterance = async () => { throw new Error('sessionController 超时') }
-  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, DEFAULT_ROUTE_THRESHOLD)
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: DEFAULT_ROUTE_THRESHOLD })
   assert.equal(result.kind, 'success', '命令不应因投递异常而崩')
   assert.ok(result.text.includes('未投递') && result.text.includes('sessionController 超时'))
+})
+
+/* ---- v0.5.1：两个真实可配参数（routerEnabled / routerThreshold）---- */
+
+await check('参数默认：不传 options → 自动切换开启、阈值 0.6（出厂默认原样生效）', async () => {
+  const { deps, calls } = fakeDeps()
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer)
+  assert.equal(result.kind, 'success')
+  assert.deepEqual(calls.select, ['engineering'], '默认配置下仍应自动切换（既有语义不变）')
+  assert.equal(calls.delivered.length, 1, '默认配置下仍应投递原话')
+})
+
+await check('自动切换关闭：仍给出完整概率判定，但不切换、不投递，并明确说明已关闭', async () => {
+  const { deps, calls } = fakeDeps()
+  const utterance = '这个插件打包后加载报错，帮我改代码'
+  const result = await routePreset(AGENT, utterance, deps, scorer, { routerEnabled: false })
+  assert.equal(result.kind, 'success', `应正常返回判定结果，实际 ${JSON.stringify(result).slice(0, 200)}`)
+  assert.equal(calls.select.length, 0, '关闭时不得调用 select')
+  assert.equal(calls.recompose.length, 0, '关闭时不得调用 recompose')
+  assert.equal(calls.wroteDefault.length, 0, '关闭时不得写默认模式')
+  assert.equal(calls.delivered.length, 0, '关闭时不得投递原话')
+  assert.ok(result.text.includes('自动切换已关闭'), '输出必须明确说明自动切换已关闭')
+  assert.ok(result.text.includes('模式命中概率'), '关闭时仍要展示概率判定（只判定与展示）')
+  assert.ok(result.text.includes('engineering'), '判定结论仍要给出最高概率的模式')
+  assert.ok(result.text.includes('未切换模式'), '必须说明本次没有切换')
+  assert.ok(result.text.includes('/switch-preset'), '要给出手动切换的指引')
+})
+
+await check('自动切换关闭 + 无原话：仍报用法错误，零副作用', async () => {
+  const { deps, calls } = fakeDeps()
+  const result = await routePreset(AGENT, '  ', deps, scorer, { routerEnabled: false })
+  assert.equal(result.kind, 'error')
+  assert.equal(calls.select.length + calls.delivered.length, 0)
+})
+
+await check('阈值可配且生效：提高到 0.99 → 达阈值的输入不再自动切换（不投递）', async () => {
+  const { deps, calls } = fakeDeps()
+  const utterance = '这个插件打包后加载报错，帮我改代码'
+  const base = scorer.score(CANDIDATES, utterance, DEFAULT_ROUTE_THRESHOLD)
+  assert.ok(base.top.probability > 0 && base.top.probability < 0.99,
+    `构造前提：该输入概率应在 (0,0.99)，实际 ${base.top.probability}`)
+  const result = await routePreset(AGENT, utterance, deps, scorer, { routerThreshold: 0.99 })
+  assert.equal(result.kind, 'success')
+  assert.equal(calls.select.length, 0, '未达新阈值不得切换')
+  assert.equal(calls.delivered.length, 0, '未达新阈值不得投递')
+  assert.ok(result.text.includes('99.0%'), '输出里的阈值必须是配置值（回显一致）')
+  assert.ok(result.text.includes('未自动切换'))
+})
+
+await check('阈值可配且生效：降到 0 → 达阈值路径照旧（切换 + 投递）', async () => {
+  const { deps, calls } = fakeDeps()
+  const utterance = '这个插件打包后加载报错，帮我改代码'
+  const result = await routePreset(AGENT, utterance, deps, scorer, { routerThreshold: 0 })
+  assert.equal(result.kind, 'success')
+  assert.deepEqual(calls.select, ['engineering'])
+  assert.deepEqual(calls.delivered, [utterance])
+  assert.ok(result.text.includes('0.0%'), '阈值回显应为 0.0%')
+})
+
+await check('非法阈值回落默认 0.6：不崩、行为与不传阈值一致（含负值/超界/非数）', async () => {
+  for (const bad of [-0.5, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '0.7', null, undefined]) {
+    const { deps, calls } = fakeDeps()
+    const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: bad })
+    assert.equal(result.kind, 'success', `阈值 ${String(bad)} 不应导致崩溃`)
+    assert.deepEqual(calls.select, ['engineering'], `阈值 ${String(bad)} 应回落 0.6（达阈值路径）`)
+    assert.ok(result.text.includes('60.0%'), `阈值 ${String(bad)} 回显应为默认 60.0%`)
+  }
+})
+
+await check('非法/缺字段的整个参数对象 → 字段级回落（开关缺省为开）', async () => {
+  const { deps, calls } = fakeDeps()
+  const result = await routePreset(AGENT, '这个插件打包后加载报错，帮我改代码', deps, scorer, { routerThreshold: 0.2, routerEnabled: 'nope' })
+  assert.equal(result.kind, 'success', '非布尔开关不得崩溃')
+  assert.deepEqual(calls.select, ['engineering'], '开关非法 → 回落 true（默认开启）')
+  assert.ok(result.text.includes('20.0%'), '阈值应生效为配置值')
+  assert.ok(!result.text.includes('自动切换已关闭'))
 })
 
 console.log(`\n[router] ${passed} 项通过` + (process.exitCode ? '（有失败）' : ''))

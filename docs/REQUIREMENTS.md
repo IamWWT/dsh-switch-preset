@@ -11,7 +11,7 @@ applies_to: dsh-switch-preset
 ## 当前状态
 
 - 文档性质：需求演进真源（需求→决策→实现→验收）
-- 对应版本：v0.5.0（2026-09-28）
+- 对应版本：v0.5.1（2026-09-28）
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -20,6 +20,38 @@ applies_to: dsh-switch-preset
 
 > 每轮需求/反馈 → 决策 → 实现落点 → 验收，按时间记录。原始需求/规格见
 > `docs/00-request/request.md` 与 `docs/specs/001-switch-preset/spec.md`。
+
+## v0.5.1（2026-09-28，路由参数可配 + 插件页原生配置区）
+
+- **用户原话（本轮）**：「给 dsh-switch-preset 加上真实可配参数，并注册到 DSH 插件页的原生配置区，
+  使其在『左侧栏 → 插件 → 点进 dsh-switch-preset 详情页』能看到参数」；
+  参数口径：① `routerEnabled`（默认开）：关闭时 `/router-preset` **只做概率判定与展示，不切换、不投递**，
+  输出里明确说明"自动切换已关闭"；② `routerThreshold`（默认 0.6，范围 0–1）：达阈值才自动切换，
+  语义不变，**上限/下限校验在 host 侧做，非法值不得导致崩溃**。
+- **需求溯源**：更早一轮原话「并在插件设置页面可设置开启或关闭是否识别后执行切换」= spec 002 未决项 U1，
+  **本版本结项**。
+- **实现落点**：
+  1. `src/shared/router-settings.ts`（新增）：`RouterSettings` 类型 + `Config` schema（volatile 字段
+     `routerSettings`）+ `normalizeRouterSettings()`（缺字段补默认、非法阈值回落 0.6）+ 边界常量；
+     `src/shared/threshold.ts`（新增）：`DEFAULT_ROUTE_THRESHOLD = 0.6` 单一真源（避免与 `route.ts` 成环）。
+  2. `src/host/route.ts`：`routePreset()` 第 5 参 → `RouteOptions`；新增 **判定后、切换前** 的
+     `routerEnabled=false` 早返回（不 `switchPreset`、不投递，文案说明已关闭 + 手动切换指引）。
+  3. `src/host/settings.ts`（新增）：0.1.7 原生设置面门面（读 volatile / `settings.mutate` 写 / watch）
+     + REST 数据面（`/api/dsh-switch-preset/settings` `GET|PUT`、`/settings/watch`）+ host 侧阈值校验。
+  4. `src/host/command.ts` + `src/index.ts`：组装期惰性读参数；导出 `Config`；`webServer` 二级注入注册路由
+     （静态 `inject` 保持 `[]`）。
+  5. `src/client/settings-card.ts` + `src/client/settings-api.ts`（新增）+ `src/client/entry.ts`：
+     注册 `plugins.bundle.config`（key = 包名），卡片含开关 + 阈值数字框 + 保存 + 失败明确文案。
+- **验收**：
+  - `pnpm check` 全绿（双端打包 + 产物门禁 + 双 tsconfig + 5 组测试：
+    冒烟 / switch / picker / router **22 项** / settings **25 项**）；
+  - 关闭自动切换：`/router-preset` 仍输出完整概率分布，`select`/`recompose`/`writeDefault`/`deliver` 调用数均为 0（单测断言）；
+  - 阈值可配生效：0.99 → 原本达阈值的输入不再切换；0 → 照旧切换并投递；非法值
+    （-0.5 / 1.5 / NaN / Infinity / '0.7' / null / undefined）→ 回落 0.6 且不崩；
+  - host 侧校验：越界/非数写入 → REST 400 + 明确文案，且不触碰 `settings.mutate`；
+  - **未做/未验证**：3082/3084 实例内的**浏览器实测**（点开插件详情页看配置区、点保存后 `routerEnabled`/`routerThreshold`
+    真正改变 `/router-preset` 行为）本轮未执行——`pnpm check` 只覆盖到"产物接线 + host 逻辑 + REST 面"，
+    端到端需安装 tgz 并重启后由用户验收（见 spec 002 §6 U4）。
 
 ## v0.5.0（2026-09-28，概率路由 `/router-preset`）
 

@@ -19,6 +19,7 @@
  * 设计取舍：DSH 服务包在 npm 全为预发布版本，为避免 semver 锁死与类型爆炸，
  * 这里只声明本插件实际消费的服务形状（最小接口，契约先行，铁律 #3）。
  */
+import type { RouterSettings } from './router-settings.ts'
 
 /** 模式（Agent preset）roster 行的最小形状（对齐 0.1.7 ctx.agentPresets.list()）。 */
 export interface PresetRow {
@@ -98,6 +99,14 @@ export interface SwitchDeps {
    * 不可用时为 undefined → 调用方必须如实告知"未投递"，不得假报成功。
    */
   readonly deliverUtterance?: (agent: AgentLike, utterance: string) => Promise<DeliveryOutcome>
+  /**
+   * v0.5.1：读 `/router-preset` 的路由参数（插件页配置区 volatile 字段 `routerSettings`）。
+   *
+   * 每次命令执行时调用（惰性），保证拿到最新值；**未提供或读取异常时**命令层按出厂默认
+   * （enabled=true、threshold=DEFAULT_ROUTE_THRESHOLD）工作——绝不因为设置面缺失就让命令失效。
+   * 返回值由 `shared/router-settings.ts` 归一化（非法阈值回落 0.6，不抛错）。
+   */
+  readonly getRouterSettings?: () => RouterSettings
 }
 
 /** 命令统一结果（对齐 0.1.7 CommandResult：success 可带 text，error 必须带 text）。 */

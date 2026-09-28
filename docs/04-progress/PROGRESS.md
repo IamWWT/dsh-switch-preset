@@ -11,7 +11,7 @@ applies_to: dsh-switch-preset
 ## 当前状态
 
 - 文档性质：进度真源（当前版本/进行中/下一步）
-- 对应版本：v0.5.0（2026-09-28）
+- **对应版本：v0.5.1（2026-09-28）**
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -62,21 +62,40 @@ applies_to: dsh-switch-preset
   decisions/README.md 索引登记 ADR-002。doc-check / npm check / quality-gate 全绿。
 - 已推远程（私有 IamWWT/dsh-switch-preset）。
 
-## ✅ 已完成（最新一批，2026-09-26 追加）
+## ✅ 已完成（最新一批，2026-09-28 追加）
+
+- **v0.5.1 路由参数可配 + 插件页原生配置区（闭合 spec 002 U1）**：
+  - 参数：`routerEnabled`（默认 true；关闭 → `/router-preset` 只判定与展示，不切换、不投递，文案写明"自动切换已关闭"）
+    + `routerThreshold`（默认 0.6、范围 0–1、非法回落，host 侧校验越界→400）；
+    落在插件行 volatile 字段 `routerSettings`（读 `config.routerSettings.get()`，写 `settings.mutate(entryId, …)`）。
+  - 落点：`src/shared/router-settings.ts`、`src/shared/threshold.ts`、`src/host/settings.ts`、
+    `src/client/settings-card.ts`、`src/client/settings-api.ts`（均新增）+ `route.ts`/`command.ts`/`index.ts`/`entry.ts` 改造。
+  - 证据：`pnpm check` 全绿（构建门禁 + 双 tsconfig + 5 组测试：冒烟 / switch / picker /
+    router **22 项** / settings **25 项**，EXIT 0）；`bash scripts/doc-check.sh` 0 错 0 警。
+  - 构建门禁增补：`plugins.bundle.config` 插槽 + **key = 包名**断言（key 写错会静默不渲染）。
+  - **未做**：浏览器端到端实测（插件详情页看配置区 → 保存 → 行为改变），见下方"下一步"。
+  - 交付物：`dsh-switch-preset-0.5.1.tgz`（旧 0.5.0 tgz 按"只留一份"删除）。
+
+## ✅ 已完成（2026-09-26 追加）
 
 - **docs 对齐审计（2026-09-26）**：README 版本改 0.4.1 + 补「环境支持矩阵」（ubuntu-4090 / windows-lite 均全量）+ 安装节改 tgz（无 link）+ 框架能力条目改 `remoteExportList()` / `settings.mutate('agent-preset-registry', selectedDefault)`；FILE_INDEX 补录 specs/20260925 三件套 + picker-test + paths.sh（doc-check §1 由 3 错转绿）；architecture.md 注入清单/默认模式真源/调用链图对齐 0.1.7；AGENTS.md 安装红线与规范路径表述修正；specs/README.md 去掉已删 `_template/` 引用。仅改文档，未动代码。
 
 ## 🔄 进行中（中断点）
 
-- **0.3.0 待用户重启 3082 生效**：插件已 link 安装 + lib 已重建 0.3.0，但运行中的 3082 是旧代码；
-  用户选择稍后自行重启（`systemctl --user restart dsh-dev-web`）。重启后需验收：
-  `/list-preset` 清单、空会话就地切换、**已开始会话强制切换（recompose）**、默认模式确认。
+- **v0.5.1 待浏览器验收**：代码与离线门禁已全绿，但**未在 3082/3084 实例里实际点开插件详情页验证配置区渲染与保存生效**
+  （`pnpm check` 不能替代浏览器实测）。安装 0.5.1 tgz 并重启后按 SESSION.md「下一步」的判据验收。
+- （历史）0.3.0 的 3082 重启验收：已随 0.4.x/0.5.x 安装完成，仅留档。
 
 ## ⏭ 下一步 + 待确认
 
-1. **⚠️ 3082 安装被系统阻断（2026-09-17 用户选择暂缓）**：根挂载 `/` 处于只读降级态（fstab `errors=remount-ro`），`~/.dsh-dev` 物理不可写（`plugin add` 直接 EROFS；连带风险：运行中 3082 的持久化写入也可能失败）。用户选择**暂缓**，待 rootfs 恢复可写后再装：
-   - 恢复后：`TARGET_DSH_HOME=$HOME/.dsh-dev bash scripts/install-to-dsh.sh`（或 `dsh plugin --profile web add <dir>`），**征得同意后** `systemctl --user restart dsh-dev-web`；
-   - 重启后按 AC-1~11 交互验收。
-2. 可选预览：临时实例 3084 仍运行（`http://127.0.0.1:3084/?token=...`，token 每次重启变化，见 bash job 输出）——可先在 3084 查看设置卡/🔄 选择器。
-3. 验收通过后：`npm pack`（升版本号）出稳定版；清理 test-home/ 与 3084。
-4. 工作区根 `progress.md` 登记本插件进度链接（跨插件协作约定）。
+1. **安装 0.5.1 + 浏览器验收（需用户授权重启 3082）**：
+   `cd dsh-plugins/dsh-switch-preset && pnpm check && npm pack` →
+   `DSH_HOME=$HOME/.dsh-dev pnpm dsh plugin --profile web add <abs>/dsh-switch-preset-0.5.1.tgz` →
+   用户同意后 `systemctl --user restart dsh-dev-web` → 左侧栏「插件」→ dsh-switch-preset 详情页应出现
+   「路由参数（/router-preset）」卡片；关掉自动切换后 `/router-preset <原话>` 只输出概率不切换。
+2. 可选后续：把 `LocalModeScorer` 替换为 JEV 类模型（`ModeScorer` 接口已就绪，命令层零改动）。
+
+### 历史待办（已闭合，留档）
+
+- 2026-09-17「3082 安装被只读根挂载阻断」：后续 rootfs 恢复后已多次完成安装（0.2.1 → 0.5.1），仅留档。
+- 临时实例 3084（`test-home/`）为测试专用、不入库；需要时 `DSH_HOME=<独立 home> pnpm dsh web --port 3084 --no-open` 重开。

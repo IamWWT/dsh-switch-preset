@@ -95,10 +95,16 @@ async function main() {
     throw new Error(`产物门禁失败：lib/client.js 未包含插件 id "${pluginId}"`);
   }
   // 插槽注册断言：实际注册的插槽必须出现在产物中（防 bundle 遗漏接线）
-  for (const slot of ["conversation.input.right", "__ModuleLoader__"]) {
+  for (const slot of ["conversation.input.right", "plugins.bundle.config", "__ModuleLoader__"]) {
     if (!clientSrc.includes(slot)) {
       throw new Error(`产物门禁失败：lib/client.js 未见 "${slot}"（未接线？检查 client/entry.ts）`);
     }
+  }
+  // v0.5.1：插件页配置区槽是 **keyed** 的，key 必须是包名——写成别的 key 会静默不渲染
+  // （上游 PluginManagerPage：configured = ledger.bundles.has(pkg.name)），故在此断言。
+  const keyPattern = new RegExp(`key:\\s*["'\`]${pluginId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["'\`]`);
+  if (!keyPattern.test(clientSrc)) {
+    throw new Error(`产物门禁失败：plugins.bundle.config 的 key 不是包名 "${pluginId}"（配置区将静默不显示）`);
   }
   // 命令名断言：Host 注册的斜杠命令名必须出现在产物中
   if (!hostSrc.includes("switch-preset") || !hostSrc.includes("list-preset")) {

@@ -2,14 +2,23 @@
  * client/entry.ts — dsh-switch-preset Client 入口（浏览器侧，DSH ModuleLoader 握手）
  *
  * v1.1（2026-09-17 用户反馈）：不再自动跳转（切换留在当前会话）、不再有设置卡
- * （inheritHistory 已废弃）。唯一注册点：
+ * （inheritHistory 已废弃）。注册点：
  *   `conversation.input.right` —— 模式选择器按钮（弹层列中文名/描述，点选经
  *   `remote.commands.execute('/switch-preset <id>')` 复用 Host 命令逻辑）。
+ *
+ * v0.5.1（2026-09-28）：**加回**设置卡片，但落在 0.1.7 的原生配置区：
+ *   `plugins.bundle.config`（keyed，**key = 包名 `dsh-switch-preset`**）→
+ *   「左侧栏 → 插件 → 点进 dsh-switch-preset 详情页」即可见两个参数（自动切换开关 + 判定阈值）。
+ *   ⚠️ 上游要求：插件详情页**只在该包名注册过 `plugins.bundle.config` 时才渲染配置区**
+ *   （`configured = ledger.bundles.has(pkg.name)`），且 key 必须是包名——写成别的 key 会静默不显示。
+ *   数据面走插件自有 REST（`/api/dsh-switch-preset/settings*`），0.1.7 已无 `settingsScope` 服务。
  *
  * sessionId 经注册时 inject 工厂的位置参数取得（framework-resolved），不是 standard prop。
  */
 import { COMMAND_NAME, ROUTER_COMMAND_NAME } from '../shared/contracts.ts'
 import { makeUi, type PickerDeps } from './ui.ts'
+import { createSettingsCard, type SettingsScopeLike } from './settings-card.ts'
+import { createApiSettingsScope } from './settings-api.ts'
 
 declare global {
   interface Window {
@@ -66,6 +75,7 @@ interface SlotsLike {
 
 interface ClientCtx {
   get: <K extends string>(key: K) => unknown
+  effect?: (fn: () => void | (() => void), label?: string) => unknown
 }
 
 /** 有限超时的 promise 包装（UI 层绝不无限转圈；不能取消的远程调用由 UI 放弃等待）。 */
@@ -126,6 +136,25 @@ export function factory(require: RequireFn): unknown {
           },
           ui.ModePickerButton as never,
         ))
+
+      // v0.5.1：插件页配置区（`plugins.bundle.config`，key = **包名**）。
+      // 上游 0.1.7 只在该包名注册过本槽时才渲染配置区；注册到别的 key / 退役槽位
+      // （如旧 `settings.plugin.item`）不会报错但永不显示（表现为卡片凭空消失）。
+      const settingsScope = createApiSettingsScope('/api/dsh-switch-preset') as unknown as SettingsScopeLike
+      const { Card: SettingsCard } = createSettingsCard({ React: React as never, scope: settingsScope })
+      const registerConfig = (): void => {
+        slots.inject('plugins.bundle.config', () =>
+          slots.register(
+            { name: 'plugins.bundle.config', key: 'dsh-switch-preset' },
+            // 正文只在 `view === 'page'` 渲染（详情页打开时）；其它视图返回 null 不占位。
+            (props?: unknown) =>
+              ((props as { view?: string } | undefined)?.view === 'page'
+                ? React.createElement(SettingsCard as () => unknown, {})
+                : null),
+          ))
+      }
+      if (typeof ctx.effect === 'function') ctx.effect(registerConfig, 'dsh-switch-preset: config card')
+      else registerConfig()
     },
   }
 }

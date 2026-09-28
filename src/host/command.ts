@@ -26,9 +26,11 @@ import {
   type SwitchDeps,
 } from '../shared/contracts.ts'
 import { listPresets, switchPreset } from './switch.ts'
-import { DEFAULT_ROUTE_THRESHOLD, routePreset } from './route.ts'
+import { routePreset } from './route.ts'
 import { defaultScorer } from './router.ts'
 import type { PluginContext, SettingsDescriptorLike, SettingsLike } from './types.ts'
+import type { RouterSettings } from '../shared/router-settings.ts'
+import { DEFAULT_ROUTER_SETTINGS } from '../shared/router-settings.ts'
 
 /** 惰性取设置在服务（index.ts 经 ctx.inject(['settings']) 提供，可能晚于 apply 就绪）。 */
 export type GetSettings = () => SettingsLike | undefined
@@ -59,6 +61,15 @@ export interface SessionControllerLike {
 
 /** 惰性解析 sessionController（可能晚于 apply 就绪；缺失即如实报告不可用）。 */
 export type GetSessionController = () => SessionControllerLike | undefined
+
+/**
+ * 惰性解析路由参数（v0.5.1）。
+ *
+ * 由 `index.ts` 经 `createRouterSettingsFacade()` 提供；读的是插件行 volatile 字段
+ * `routerSettings`（loader 维护的当前值）。**返回值必须已归一化**（非法阈值回落 0.6）；
+ * 命令层对缺失/异常再兜一层出厂默认，保证 `/router-preset` 在设置面不可用时仍按原语义工作。
+ */
+export type GetRouterSettings = () => RouterSettings
 
 /** 判定一个设置条目是否是 preset 注册表（带 selectedDefault 字段的那条）。 */
 function looksLikeRegistry(descriptor: SettingsDescriptorLike): boolean {
@@ -95,10 +106,21 @@ export function buildSwitchDeps(
   ctx: PluginContext,
   getSettings: GetSettings,
   getSessionController?: GetSessionController,
+  getRouterSettings?: GetRouterSettings,
 ): SwitchDeps {
   const projections = ctx.get?.('sessionProjections') as ProjectionsLike | undefined
+  // v0.5.1：路由参数每次执行时惰性读取（设置页改动即时生效）；缺失/异常回落出厂默认，
+  // 归一化交给命令层（`routePreset` 内部的 normalizeRouterSettings）保证不会抛错。
+  const routerSettings = (): RouterSettings => {
+    try {
+      return getRouterSettings?.() ?? { ...DEFAULT_ROUTER_SETTINGS }
+    } catch {
+      return { ...DEFAULT_ROUTER_SETTINGS }
+    }
+  }
   return {
     agentPresets: ctx.agentPresets,
+    getRouterSettings: routerSettings,
     // v0.5.0：③ 投递原话（Host 侧，core 服务 sessionController.prompt，不调用模型 API）
     deliverUtterance: async (agent, utterance) => {
       const controller = getSessionController?.()
@@ -156,29 +178,33 @@ export function registerSwitchPresetCommands(
   ctx: PluginContext,
   getSettings: GetSettings,
   getSessionController?: GetSessionController,
+  getRouterSettings?: GetRouterSettings,
 ): void {
   ctx.commands.register({
     name: COMMAND_NAME,
     description: '切换当前会话模式（Agent preset）：空会话就地切换；已开始的会话按需强制重装配',
     input: { hint: '<preset-id>（可留空查看清单）' },
     // 每次执行时重建 deps：settings / 投影等可能晚于注册时点就绪，惰性取最新
-    handler: async ({ agent, rawInput }) => switchPreset(agent, rawInput, buildSwitchDeps(ctx, getSettings, getSessionController)),
+    handler: async ({ agent, rawInput }) => switchPreset(agent, rawInput, buildSwitchDeps(ctx, getSettings, getSessionController, getRouterSettings)),
   })
 
   ctx.commands.register({
     name: LIST_COMMAND_NAME,
     description: '列出全部可用模式（preset id + 中文名 + 中文描述）及当前/默认模式',
-    handler: async ({ agent }) => listPresets(agent, buildSwitchDeps(ctx, getSettings, getSessionController)),
+    handler: async ({ agent }) => listPresets(agent, buildSwitchDeps(ctx, getSettings, getSessionController, getRouterSettings)),
   })
 
   // v0.5.0：概率路由（用户 2026-09-28 需求）——判定 → 切换 → 原话接力。
   // 切换语义复用 switchPreset（单一真源）；"接力发送"由客户端解析结果标记后走原生输入通道完成。
+  // v0.5.1：第 5 参改为 RouteOptions（来自设置页的 enabled/threshold，两个参数都可配）。
   ctx.commands.register({
     name: ROUTER_COMMAND_NAME,
     description: '按概率判定该用哪个模式：达阈值自动切换，并把你的原话作为该模式下的输入继续',
     input: { hint: '<你的原话>（系统判定模式概率最高者）' },
-    handler: async ({ agent, rawInput }) =>
-      routePreset(agent, rawInput, buildSwitchDeps(ctx, getSettings, getSessionController), defaultScorer, DEFAULT_ROUTE_THRESHOLD),
+    handler: async ({ agent, rawInput }) => {
+      const deps = buildSwitchDeps(ctx, getSettings, getSessionController, getRouterSettings)
+      return routePreset(agent, rawInput, deps, defaultScorer, deps.getRouterSettings?.() ?? { ...DEFAULT_ROUTER_SETTINGS })
+    },
   })
 
   ctx.logger.info(

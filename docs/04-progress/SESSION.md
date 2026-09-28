@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 文档性质：会话交接单
-- 对应版本：v0.5.0（2026-09-28）
+- 对应版本：v0.5.1（2026-09-28）
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -12,17 +12,34 @@
 
 ## 🔄 进行中 / 上次进度
 
-0. **v0.5.0 概率路由 `/router-preset`（2026-09-28）**：
+0. **v0.5.1 路由参数可配 + 插件页原生配置区（2026-09-28）——代码与门禁完成，浏览器端到端未验收**：
+   - 交付：插件行 volatile 设置字段 `routerSettings`（`routerEnabled` 默认 true；`routerThreshold`
+     默认 0.6、范围 0–1、非法回落）；`routePreset()` 第 5 参改 `RouteOptions` 并新增
+     「判定后、切换前」的关闭早返回（不切换、不投递）；`src/host/settings.ts`（0.1.7 设置面 +
+     REST 数据面 + host 侧阈值校验）；客户端注册 `plugins.bundle.config`（key = 包名
+     `dsh-switch-preset`）配置卡片（开关 + 阈值 + 保存 + 失败明确文案）。
+   - 验证：`pnpm check` 全绿（构建门禁 + 双 tsconfig + 5 组测试：冒烟 / switch / picker /
+     router **22 项** / settings **25 项**）。
+   - **未做**：3084/3082 浏览器实测（点开插件详情页看配置区 → 改参数 → 保存后 `/router-preset`
+     行为随之改变）——`pnpm check` 只覆盖"产物接线 + host 逻辑 + REST 面"，不等于端到端验收（spec 002 §6 U4）。
+   - 交付物：`dsh-switch-preset-0.5.1.tgz`（同一 `pnpm check` 产物；旧 0.5.0 tgz 已按"只留一份"删除）。
+   - 依赖口径提醒：`.volatile()` 需 `@deepseek-ai/schemastery ≥ 3.18.3`；本机曾残留 3.18.2
+     （lockfile 为 3.18.4），已用 `pnpm install --frozen-lockfile` 对齐（不改锁文件、不改上游）。
+
+1. **v0.5.0 概率路由 `/router-preset`（2026-09-28）**：已交付并验证。
    - 交付：`ModeScorer` 可插拔概率引擎 + `/router-preset` 三步流水（判定 → 切换 → 投递原话）+ 客户端置顶入口。
    - 验证：`pnpm check` 全绿（`test/router-test.mjs` 15 项）；3084 隔离实例真实 6 模式环境
      端到端实测通过（`agent-preset/selected{agentPreset:video}` + `agent/inbox/spliced` 原话入队 +
      `system/message` 为视频模式人设）。证据链见 `docs/REQUIREMENTS.md` v0.5.0 条目。
    - 关键设计结论：**投递必须在 Host 侧**（上游命令 handler 不发模型消息，客户端拿不到键入命令的结果）。
-   - 交付物：`dsh-switch-preset-0.5.0.tgz`（shasum 620acde2…；旧版 tgz 已按"只留一份"纪律删除）。
+   - 交付物：`dsh-switch-preset-0.5.0.tgz`（已被 0.5.1 取代并删除）。
 
 ## ⏭ 下一步 / 待确认
 
-- **3082 安装待用户授权**（`pnpm dsh plugin --profile web add <0.5.0 tgz>` + `systemctl --user restart dsh-dev-web`）。
+- **3082 安装待用户授权**（`pnpm dsh plugin --profile web add <0.5.1 tgz>` + `systemctl --user restart dsh-dev-web`）；
+  装完请用户做浏览器验收：插件详情页能看到「路由参数」卡片 → 关掉「自动切换」→
+  `/router-preset <原话>` 应只输出概率分布并写明"自动切换已关闭"、不切换、不投递；
+  再把阈值改成 0.99 保存 → 原本会自动切换的输入应变成"未自动切换"。
 - 可选后续：把 `LocalModeScorer` 替换为 JEV 类模型的概率输出（`ModeScorer` 接口已就绪，命令层零改动）。
 
 ---

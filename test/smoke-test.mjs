@@ -58,11 +58,27 @@ check("VERSION 导出", typeof mod.VERSION === "string" && mod.VERSION === pkg.v
 for (const k of ["name", "inject", "apply"]) {
   check(`导出 ${k}`, k in mod);
 }
+// v0.5.1：0.1.7 原生设置面必须导出 Config（否则插件详情页配置区拿不到 volatile 字段 routerSettings）
+check("导出 Config（0.1.7 原生设置面）", "Config" in mod);
+const configJson = mod.Config && typeof mod.Config.toJSON === "function"
+  ? JSON.stringify(mod.Config.toJSON())
+  : "";
+check("Config 含 volatile 字段 routerSettings", configJson.includes("routerSettings"),
+  configJson.includes("routerSettings") ? "ok" : "(schema 里没找到 routerSettings)");
+// 静态 inject 必须保持为空数组（把 commands/webServer 写进静态 inject 会让 apply 永不执行，见 v2.0 事故）
+check("静态 inject 为空数组（命令/路由走二级注入）",
+  Array.isArray(mod.inject) && mod.inject.length === 0, JSON.stringify(mod.inject));
 
 console.log("[4/4] Client 侧产物");
 const clientSrc = readFileSync(libClient, "utf8");
 check("client.js 含 window.__ModuleLoader__ 约定", clientSrc.includes("__ModuleLoader__"));
 check("client.js 含插件 id", clientSrc.includes(pkg.name));
+// v0.5.1：插件页配置区（keyed 槽，key 必须是包名，否则配置区静默不渲染）
+check("client.js 注册 plugins.bundle.config", clientSrc.includes("plugins.bundle.config"));
+check("配置区 key = 包名", new RegExp(`key:\\s*["'\`]${pkg.name}["'\`]`).test(clientSrc));
+// 数据面接线（baseUrl 与路由后缀在产物里是相邻的模板字符串片段，分开断言更稳）
+check("client.js 含设置数据面 base 路径", clientSrc.includes("/api/dsh-switch-preset"));
+check("client.js 含设置数据面路由后缀", clientSrc.includes("/settings/watch?timeoutMs="));
 
 console.log(failures === 0 ? "\n✅ 冒烟测试全部通过" : `\n❌ ${failures} 项失败`);
 process.exit(failures === 0 ? 0 : 1);

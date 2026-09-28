@@ -11,7 +11,10 @@ applies_to: dsh-switch-preset
 # FILE_INDEX - 文件索引
 
 > 由 Agent 维护：每次新增/删除/移动文件后更新本表。
-> 更新: 2026-09-26 | 项目: dsh-switch-preset
+> 更新: 2026-09-28 | 项目: dsh-switch-preset
+> 2026-09-28 v0.5.1 补录：src/host/router.ts、src/host/route.ts、src/host/settings.ts、
+> src/client/settings-card.ts、src/client/settings-api.ts、src/shared/router-settings.ts、
+> src/shared/threshold.ts、test/router-test.mjs、test/settings-test.mjs。
 > 2026-09-26 文档对齐审计：版本提及（README 0.4.1）、安装方式（tgz，无 link）、环境表述（环境支持矩阵）对齐；
 > 补录 specs/20260925-native-entry-ui 三件套、test/picker-test.mjs、scripts/paths.sh。
 > 2026-09-21 清理：移除 init 脚手架残留（MANUAL/prompts/语言模板/工程工具脚本/空壳占位/无效 ADR-001 与临时实例产物 test-home），实证归档 docs/05-testing/。
@@ -58,26 +61,35 @@ applies_to: dsh-switch-preset
 - docs/specs/001-switch-preset/spec.md - 规格 001（AC-1~AC-16，用户已确认）
 - docs/specs/001-switch-preset/plan.md - 技术规划 001
 - docs/specs/001-switch-preset/tasks.md - 任务拆解 001（T1~T6）
-- docs/specs/002-router-preset/spec.md - 规格 002（/router-preset 概率路由，已交付 v0.5.0，含实测证据与未决项）
+- docs/specs/002-router-preset/spec.md - 规格 002（/router-preset 概率路由；v0.5.0 交付、v0.5.1 结项 U1，含实测证据与未决项）
 - docs/specs/20260925-native-entry-ui/spec.md - 规格 20260925（原生 Menu 入口交互修复，v0.4.1）
 - docs/specs/20260925-native-entry-ui/plan.md - 技术规划 20260925（Menu/portal 契约与回退）
 - docs/specs/20260925-native-entry-ui/tasks.md - 任务拆解 20260925（含未完成项：全量 check 与隔离实例验收）
 
 ## src/（源码）
 
-- src/index.ts - Host 入口（name/inject/VERSION/apply + settings 二次注入）
+- src/index.ts - Host 入口（name/inject/VERSION/apply + settings/sessionController/webServer 二级注入 + 再导出 Config）
 - src/host/switch.ts - 切换/列表纯逻辑（select / recompose 强制 / 降级默认，可单测）
-- src/host/command.ts - 双命令注册 + ctx 服务组装（buildSwitchDeps 惰性解析 settings）
+- src/host/router.ts - 概率判定引擎（ModeScorer 接口 + LocalModeScorer，可插拔 JEV 接入点）
+- src/host/route.ts - `/router-preset` 三步编排（判定 → 复用 switchPreset 切换 → 投递）+ 路由参数归一化
+- src/host/settings.ts - v0.5.1 设置面（volatile `routerSettings` 读/写/watch + REST 数据面 + host 侧阈值校验）
+- src/host/command.ts - 三条命令注册 + ctx 服务组装（buildSwitchDeps 惰性解析 settings/sessionController/路由参数）
 - src/host/types.ts - cordis Context 最小服务类型扩展
-- src/client/entry.ts - Client 入口（ModuleLoader.load + 模式选择器注册）
+- src/client/entry.ts - Client 入口（ModuleLoader.load + 模式选择器 + `plugins.bundle.config` 配置卡注册）
 - src/client/ui.ts - React 组件（模式选择器：中文名/描述弹层，h 函数式）
-- src/shared/contracts.ts - 跨端契约（PresetRow/AgentPresetsLike/常量单一真源）
+- src/client/settings-card.ts - v0.5.1 配置卡（自动切换开关 + 判定阈值 + 保存/恢复默认 + 失败文案）
+- src/client/settings-api.ts - v0.5.1 配置卡数据面（REST 适配器 + 长轮询热同步 + 明确错误）
+- src/shared/contracts.ts - 跨端契约（PresetRow/AgentPresetsLike/SwitchDeps/常量单一真源）
+- src/shared/router-settings.ts - v0.5.1 路由参数（类型/Config schema/归一化/边界，跨端单一真源）
+- src/shared/threshold.ts - v0.5.1 阈值默认值 0.6 的唯一常量定义（避免 route↔settings 成环）
 
 ## test/（测试）
 
-- test/smoke-test.mjs - 冒烟（产物/版本四处同步/导出完整性）
+- test/smoke-test.mjs - 冒烟（产物/版本四处同步/导出完整性/Config 与配置区接线）
 - test/switch-test.mjs - switch/list 纯逻辑 10 组单测（v1.2 矩阵：select/recompose/降级/报错链）
 - test/picker-test.mjs - 模式选择器（Menu 接线/弹层数据）单测
+- test/router-test.mjs - `/router-preset` 判定/阈值/投递 22 项单测（v0.5.1 含可配参数用例）
+- test/settings-test.mjs - v0.5.1 路由参数 25 项单测（归一化/写入校验/门面/REST/Config schema/配置卡片）
 
 ## scripts/（构建与安装）
 

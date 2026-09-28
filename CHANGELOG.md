@@ -1,5 +1,45 @@
 # CHANGELOG
 
+## 0.5.1（2026-09-28）— 两个路由参数真实可配 + 插件页原生配置区（闭合 spec 002 U1）
+
+- **需求依据**：更早一轮用户原话「并在插件设置页面可设置开启或关闭是否识别后执行切换」
+  （spec 002 记为未决项 U1，本轮结项）+ 本轮要求「阈值可配、上下文校验、非法值不得崩溃」。
+- **新增两个真实可配参数**（写在 profile 条目 `switch-preset` 的 volatile 字段 `routerSettings`）：
+  | 参数 | 默认 | 范围 | 语义 |
+  |---|---|---|---|
+  | `routerEnabled` | `true` | 布尔 | 关闭时 `/router-preset` **只做概率判定与展示，不切换、不投递**，输出明确写"自动切换已关闭" |
+  | `routerThreshold` | `0.6` | `0`–`1` | 达阈值才自动切换（语义不变）；越界/非数由 host 侧回落 0.6 |
+- **Host**：
+  - `src/host/route.ts`：`routePreset()` 第 5 参由裸阈值改为 `RouteOptions`（`Partial<RouterSettings>`）；
+    新增 **判定后、切换前** 的 `routerEnabled=false` 早返回分支（不调用 `switchPreset`、不投递）；
+    参数在最前面经 `normalizeRouterSettings` 归一化，任何非法输入都不抛错；
+    `DEFAULT_ROUTE_THRESHOLD` 仍为 0.6 单一真源（下沉到 `src/shared/threshold.ts`，本文件再导出，保持既有导入路径）。
+  - `src/host/settings.ts`（新增）：照 `dsh-minesweeper` 范式实现 0.1.7 原生设置面——
+    读 `config.routerSettings.get()`、写 `settings.mutate(entryId, [{op:'set',path:['routerSettings',<key>]}], revision)`、
+    监听 `loader/volatile-update`、自带 REST 数据面（`/api/dsh-switch-preset/settings` `GET|PUT`、`/settings/watch`）；
+    写入前做阈值的 host 侧上下限校验（越界/非数 → 400 明确文案）。
+  - `src/host/command.ts`：组装时经 `GetRouterSettings` 惰性读取参数（设置面缺失 → 出厂默认，命令永远可用）。
+  - `src/index.ts`：导出 `Config`（`routerSettings` volatile 字段）；`webServer` 走二级注入 + `efect` 注册路由
+    （静态 `inject` 仍为空数组——把 `commands`/`webServer` 写进静态 inject 会让 apply 永不执行，v2.0 事故）。
+- **Client**：新增 `src/client/settings-card.ts` + `src/client/settings-api.ts`；`src/client/entry.ts` 注册
+  `plugins.bundle.config`（**key = 包名 `dsh-switch-preset`**，上游只在该包名注册过时才渲染配置区）；
+  卡片含「自动切换」开关 + 「判定阈值」数字框 + 保存/恢复默认 + 失败明确文案（含服务端原因），
+  CSS 全走 `--dsw-*` token，异步全带超时。
+- **构建门禁**：`scripts/build.mjs` 增补 `plugins.bundle.config` 插槽断言与 **key = 包名** 断言
+  （key 写错会静默不显示，属高危静默失败）；`test/smoke-test.mjs` 增补 `Config` 导出、volatile 字段、
+  静态 inject 为空数组、配置区接线共 6 条断言。
+- **测试**：`test/router-test.mjs` 15 → **22 项**（新增：默认参数不变、关闭自动切换不切换不投递且文案说明、
+  关闭+无原话零副作用、阈值 0.99 生效不切换、阈值 0 生效照旧切换、非法阈值回落 0.6 不崩、参数对象字段级回落）；
+  新增 `test/settings-test.mjs` **25 项**（归一化/边界+回落、写入校验与 ops 形状、门面读/写/watch、
+  REST GET/PUT/坏 JSON/405/watch 下限、Config schema 形状、**配置卡片 6 项**：控件渲染/保存提交两字段/
+  越界前端拦截/失败文案带服务端原因/数据面不可用降级/热同步跟随新 revision）。
+- **验证**：`pnpm check` 全绿——双端打包 + 产物门禁 + 双 tsconfig typecheck +
+  5 组测试（冒烟 / switch / picker / router 22 / settings 19）。tgz 文件名 `dsh-switch-preset-0.5.1.tgz`。
+- **知识记录（依赖口径）**：本插件 `package.json` 的 `@deepseek-ai/schemastery` 为 `>=3.18.0 <4.0.0-0`，
+  而 `.volatile()` 在 **3.18.3 起**才有；本机 `node_modules` 曾残留 3.18.2（lockfile 已是 3.18.4），
+  表现为 `TypeError: ....default(...).volatile is not a function`。处置：`pnpm install --frozen-lockfile`
+  对齐 lockfile（**不改锁文件、不改上游**），不写版本探测分支。
+
 ## 0.5.0（2026-09-28）— `/router-preset` 概率路由：判定 → 切换 → 原话投递
 
 - **需求原话**（用户 2026-09-28）：「如果不给答案可以给出判定某个模式命中的概率，概率第一高的就是要切换的
