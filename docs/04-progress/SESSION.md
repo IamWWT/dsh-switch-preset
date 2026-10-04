@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 文档性质：会话交接单
-- 对应版本：v0.6.0（2026-10-05）
+- 对应版本：v0.6.1（2026-10-05）
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -12,7 +12,18 @@
 
 ## 🔄 进行中 / 上次进度
 
-0. **v0.6.0 记忆路由 + B1 修复（2026-10-05）——代码、typecheck、单测全绿；tgz 已打包，安装未做**：
+0. **v0.6.1 配置页补全（2026-10-05，用户反馈「配置页没有完整的帮助说明和可设置内容」）**：
+   - 客户端卡片新增「命令与使用帮助」区块（/switch-preset、/list-preset、/router-preset、
+     /router-preset-memory + 三个参数语义 + 未达阈值行为）+ **kbRoot 文本框**（可留空自动回退）；
+   - host buildWriteOps 白名单加 kbRoot（独立 volatile 字段路径 `['kbRoot']`）、facade.getKbRoot、
+     REST GET/PUT value 平铺返回 kbRoot、watch 监听 kbRoot；shared 新增 `KB_ROOT_FIELD` 常量；
+   - 验证：双 tsconfig typecheck 绿；6 组测试全绿（settings **27 项**，新增 kbRoot 2 项）；
+     `dsh-switch-preset-0.6.1.tgz`（309695B）**已装**（profile 引用 + node_modules 验证通过）；
+   - 已推送：monorepo `135155f`、public 双轨仓 `f8b6ea8`。
+   - **待用户重启验收**：托盘退出重开桌面应用后，插件详情页应看到帮助区块 + kbRoot 输入框；
+     保存 kbRoot 指向 dsh-kb 后 `/router-preset-memory` 按新路径读记忆。
+
+1. **v0.6.0 记忆路由 + B1 修复（2026-10-05）——代码、typecheck、单测全绿；安装已完成**：
    - **新增 `/router-preset-memory <原话>`**（用户记忆路由指导文件第 2 步）：与 `/router-preset`
      相同判定→切换（复用 `switchPreset` 单一真源），但投递内容 = **dsh-kb 渐进加载的记忆
      （L1 人物画像 ≤100 行 → L2 项目卡片关键词匹配 ≤2×40 行 → L3 近 3 天日记节选）+ 原话**。
