@@ -120,12 +120,33 @@ export const COMMAND_NAME = 'switch-preset'
 /** 列表指令名：查看 /switch-preset 应填写的 preset id 及中文描述。 */
 export const LIST_COMMAND_NAME = 'list-preset'
 
-/**
- * 概率路由指令名（v0.5.0，用户 2026-09-28 需求）：
- * `/router-preset <用户原话>` = 概率判定 → 达阈值切换 → 原话在切换后模式下继续交互。
- * 客户端需要识别这条命令的结果并执行"接力发送"（见 host/route.ts 的标记契约）。
- */
+/** 未达阈值时给出「手动切换」指引的指令名（首页脚本由此区分两态）。 */
 export const ROUTER_COMMAND_NAME = 'router-preset'
+
+/**
+ * 记忆路由指令名（v0.6.0，2026-10-05，用户记忆路由指导文件第 2 步）：
+ * `/router-preset-memory <你的原话>` = 与 `/router-preset` 相同的概率判定→切换，
+ * 但投递内容 = 「dsh-kb 渐进加载的记忆上下文 + 原话」，让切换后模式下的 agent
+ * 开局就带相关记忆（L1 个人记忆 → L2 项目记忆 → L3 会话记忆）。
+ */
+export const MEMORY_ROUTER_COMMAND_NAME = 'router-preset-memory'
+
+/** 渐进式记忆加载结果（host/memory.ts 的对外形状，命令层回显用）。 */
+export interface MemoryContextResult {
+  /** 是否成功解析到可用知识库并完成至少 L1 加载。 */
+  readonly ok: boolean
+  /** 面向用户的说明（加载了哪些层/失败原因），用于命令回显。 */
+  readonly summary: string
+  /** 投递给会话的记忆上下文文本（拼上原话后作为该会话的后续输入）。 */
+  readonly context: string
+}
+
+/**
+ * 记忆增强回调（v0.6.0，routePreset 可选第 6 参）：
+ * 在投递前把「原话」加工为「记忆上下文 + 原话」。不传 = 行为与 v0.5.x 完全一致；
+ * 传入 = `/router-preset-memory` 的投递内容替换。由命令层注入（memory.ts 的加载逻辑）。
+ */
+export type RouteEnrich = (utterance: string, topId: string) => Promise<MemoryContextResult>
 
 /**
  * 内置 preset 注册表条目 id（0.1.7 从 `@deepseek-ai/dsh-web-app` 的 patch 层挂载）。

@@ -1,5 +1,44 @@
 # CHANGELOG
 
+## 0.6.0（2026-10-05）— 记忆路由 `/router-preset-memory` + 修复新会话命令结果不可见（B1）
+
+- **需求依据**：
+  - 用户记忆路由指导文件第 2 步：「/router-preset-memory {用户原话} → 渐进式根据需求加载记忆：
+    个人记忆、选择项目记忆、选择性会话记忆」→ 落地 `/router-preset-memory`（对应 dsh-kb 的
+    L1 个人 → L2 项目 → L3 会话读取层级，见 dsh-kb 00-索引/记忆路由指导.md）。
+  - 用户现场反馈（2026-10-05 原话）：「现状的 /router-preset {用户描述} 在新会话下发起时，如果
+    判定分派概率小于阈值没有触发时，页面直接不展示对话和输出，也看不到详细的判定详情，我需要看到。」
+    → B1 修复。
+- **新增 `/router-preset-memory`（记忆路由）**：与 `/router-preset` 相同判定→切换（复用
+  `switchPreset` 单一真源），但投递内容 = **dsh-kb 渐进加载的记忆上下文 + 原话**。
+  - `src/host/memory.ts`（新增，纯逻辑域，不调用任何 LLM API、不依赖其他插件）：
+    四层 kbRoot 回退（config → `DASH_KB_HOME` → 模块位置推导 → `~/dsh-kb`）；
+    L1 人物画像（≤100 行）；L2 项目卡片关键词匹配（≤2 张 × ≤40 行）；L3 近 3 天日记（事实/沟通/决策节选）；
+    知识库缺失/读取异常 → `{ok:false}` + 明确说明，**不阻塞切换与投递**。
+  - `src/host/route.ts`：`routePreset()` 新增可选第 6 参 `enrich`（RouteEnrich 回调）——
+    不传行为与 v0.5.x 完全一致；传入则投递内容 = 记忆上下文 + 原话（达阈值/未达阈值两分支统一）。
+  - `src/shared/contracts.ts`：`MEMORY_ROUTER_COMMAND_NAME`、`MemoryContextResult`、`RouteEnrich`。
+  - `src/shared/router-settings.ts`：Config 新增 `kbRoot` volatile 字段（未配置时四层回退兜底）。
+  - `src/host/command.ts` / `src/index.ts`：注册第 4 条命令，注入 `GetKbRoot` 读取器。
+- **B1 修复（未达阈值在新会话下页面无输出）**：
+  - **根因（上游代码实证）**：未达阈值分支只返回 `CommandResult`（不产生任何会话事件）→ host blank
+    状态机只认 `turn/start` 翻转 blank（`session-controller/src/list.ts:49`）→ client chat 视图
+    `isActive` 要求存在非 command 节点（`ui-chat/chat-snapshot-builder.ts:1206`；测试明确断言
+    command-only 会话对 shell **inactive**）→ `ui-conversation/assembly.ts:174` 的 activeTargets
+    实为 isActive 过滤后的集合 → `DefaultConversationViews.tsx:35` 对 blank 会话返回 null →
+    页面空白。**该行为影响所有纯文本命令**（/list-preset 等），不只 router-preset。
+  - **修复（用户确认方案）**：未达阈值时**不切换模式**，但把「判定详情 + 原话」一起投递到
+    **当前模式**继续（投递必然产生 `turn/start` → blank 翻转 → 判定详情页面可见，且原话不切错模式）。
+    投递失败（通道缺失/被拒/抛错）如实回显"未投递 + 手动重发"指引，不假报成功。
+  - 语义变更：v0.5.1「未达阈值不投递」→ v0.6.0「未达阈值不切换、但投递判定详情+原话到当前模式」；
+    `routerEnabled=false`（用户显式关闭自动切换）分支保持**不投递**（尊重开关，只判定展示）。
+- **测试**：`test/router-test.mjs` 2 处断言随 B1 语义更新（未达阈值/阈值 0.99 → 投递判定详情+原话）；
+  新增 `test/memory-test.mjs` **6 项**（kbRoot 字符串/volatile 解析、L1+L2+L3 加载、无关原话不加载
+  项目卡片、知识库缺失 ok=false 不抛、空配置形状合法）。`package.json` test/check 链加入 memory-test。
+- **验证**：typecheck 通过（tsc strict，@types/node 22 经 store junction 补链）；esbuild CLI 双端打包；
+  5 组测试全绿（smoke / switch / picker / router 22 / memory 6 / settings 25）。
+- **未做（需授权）**：tgz 打包安装到桌面版 profile + 托盘退出后重开验收（Windows 安装红线）。
+
 ## 0.5.1（2026-09-28）— 两个路由参数真实可配 + 插件页原生配置区（闭合 spec 002 U1）
 
 - **需求依据**：更早一轮用户原话「并在插件设置页面可设置开启或关闭是否识别后执行切换」

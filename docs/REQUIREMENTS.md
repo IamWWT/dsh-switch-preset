@@ -21,6 +21,75 @@ applies_to: dsh-switch-preset
 > 每轮需求/反馈 → 决策 → 实现落点 → 验收，按时间记录。原始需求/规格见
 > `docs/00-request/request.md` 与 `docs/specs/001-switch-preset/spec.md`。
 
+## v0.6.0 补充（2026-10-05，用户现场反馈 B1：未达阈值时判定详情不可见）
+
+- **用户原话**：「现状的 /router-preset {用户描述} 在新会话下发起时，如果判定分派概率小于阈值
+  没有触发时，页面直接不展示对话和输出，也看不到详细的判定详情，我需要看到。」
+- **现象**：新会话（空会话）下输入 `/router-preset <原话>`，判定未达阈值（不切换、不投递）时，
+  命令**有返回文本**（判定分布+原因），但 Web 页面既不显示对话、也不显示任何输出。
+  达阈值路径正常（因为投递了原话，模型回复触发渲染）。
+- **影响面**：不止 `/router-preset`——推断所有「纯返回文本、不投递」的命令结果
+  （`/list-preset`、`/switch-preset` 无参、未达阈值分支）在空会话下都可能不可见。
+- **决策**：先读上游命令结果渲染链路定位根因（可能客户端无命令结果订阅 / 结果需随会话 turn 渲染 /
+  空会话无渲染载体），选**最小的公开契约合规修复**；不 monkey patch（铁律）。
+- **根因（2026-10-05 上游代码实证，闭环）**：未达阈值分支只返回 `CommandResult`（不投递任何会话事件）
+  → host blank 状态机只认 `turn/start` 翻转 blank（`session-controller/src/list.ts:49`
+  `blank = state.blank && event.type !== 'turn/start'`）→ client 装配 command 节点但 chat 视图
+  `isActive` 要求存在非 command 节点（`ui-chat/chat-snapshot-builder.ts:1206`；测试明确断言
+  command-only history 对 shell **inactive**）→ `ui-conversation/assembly.ts:174` 的 activeTargets
+  实为 isActive 过滤后的集合 → `DefaultConversationViews.tsx:35` 对 blank 会话返回 null →
+  **页面空白**。即上游 blank 会话设计让「纯命令结果（无 user/assistant 事件）」在新会话不可见，
+  不只 router-preset（/list-preset 同理）。
+- **修复决策（2026-10-05 用户确认）**：未达阈值时**投递「判定详情 + 原话」到当前模式继续**
+  （不切换模式，投递内容带判定详情）。投递必然产生 `turn/start` → blank 翻转 → 页面渲染，
+  用户能看到判定详情且原话在当前模式下被正常处理。语义变更：v0.5.1「未达阈值不投递」
+  → v0.6.0「未达阈值不切换、但投递判定详情+原话到当前模式」。`enabled=false`（自动切换关闭）
+  分支**不投递**（用户显式关掉的场景尊重开关：只判定展示）。
+- **验收**：新会话下 `/router-preset <低置信度原话>` 必须在页面看到完整判定详情（模式命中概率+
+  阈值判定+未切换说明）且原话被当前模式继续处理；达阈值路径行为不变；`/list-preset` 等纯文本命令
+  新会话下仍不可见（上游设计，不在本修复范围）。
+
+## v0.6.0（2026-10-05，记忆路由 `/router-preset-memory`：切模式后渐进式加载 dsh-kb 记忆）
+
+- **用户原话（本轮）**：「（1）更新dsh插件 router-preset … #1 用户需求处理：新开Session …
+  2，记忆加载判定：XX preset模式下，/router-preset-memory {用户原话}
+  输出：system prompt中渐进式根据需求加载记忆：个人记忆、选择项目记忆、选择性会话记忆。」
+  ——即 `/router-preset`（v0.5.x 已有：概率判定→切换→投递原话）的**记忆增强版**：
+  切换成功后，把相关 dsh-kb 记忆（L1 个人记忆 → L2 项目记忆 → L3 会话记忆）随原话一起投递，
+  让切换后模式下的 agent 一开始就有上下文。
+- **需求溯源**：用户提供「记忆路由指导文件」（#0 记忆分层 + #1 新开 Session 流程）要求落 dsh-kb
+  （`00-索引/记忆路由指导.md`，2026-10-05 入库）；本版本在插件侧落地第 2 步。
+- **设计决策**：
+  1. **复用不重写**：`/router-preset-memory` 复用 `routePreset()` 的判定→切换流水（单一真源），
+     仅通过**可选第 6 参 `enrich`** 把「投递内容」从纯原话替换为「记忆上下文 + 原话」——既有
+     调用方（`/router-preset`）不传该参，行为与语义零变化（v0.5.x 全部测试原样通过）。
+  2. **记忆加载是纯文件读取**（铁律 #3 不调 LLM）：`src/host/memory.ts` 只读 dsh-kb 文件拼文本，
+     由命令行把拼接结果交给现有 `deliverUtterance`（sessionController.prompt，走 DSH 自己的 agent 循环）。
+  3. **kbRoot 解析复用工作区约定**（daily-workbench 同范式，不依赖其他插件——铁律 #2 禁插件互依）：
+     配置 `kbRoot` 字段 > `DASH_KB_HOME` 环境变量 > 模块位置推导 `<DEEPSEEK_ROOT>/data/dsh-kb`
+     （源码树态）> profile 依赖反推（安装态）> `~/dsh-kb`（历史兜底）。
+  4. **渐进加载与限量**（对齐 dsh-kb L0-L5 协议）：L1 `01-偏好/人物画像.md`（档案区，≤100 行）；
+     L2 `02-项目/*.md` 按原话关键词匹配（≤2 张卡，各 ≤40 行）；L3 `04-每日/` 最近 3 天（各取事实/决策小节
+     节选）。找不到知识库/命令执行失败 → **明确告知未加载记忆，不阻塞**（照常切模式+投递原话）。
+  5. **不硬编码机器路径**：所有路径经 `node:os/node:path` 解析；测试用临时目录造假 dsh-kb 跑纯逻辑。
+- **实现落点**：
+  1. `src/shared/contracts.ts`：新增 `MEMORY_ROUTER_COMMAND_NAME = 'router-preset-memory'`；
+     `MemoryContextResult` 形状（`{ ok, summary, context }`）。
+  2. `src/host/memory.ts`（新增）：`resolveKbRoot(cfg)`（四层回退）+ `loadMemoryContext(kbRoot, utterance)`
+     （L1/L2/L3 渐进加载，限量截断）。
+  3. `src/host/route.ts`：`routePreset()` 新增**可选** `enrich?: (utterance: string, topId: string) =>
+     Promise<{ summary: string; context: string }>`；投递前若传入则内容改为拼接记忆上下文，
+     回显附 `summary`（加载了哪些层）。既有调用零改动。
+  4. `src/host/command.ts` + `src/index.ts`：注册 `/router-preset-memory`（同判定+切换，投递带记忆）；
+     `Config` 增加 `kbRoot` 字段（与 daily-workbench 同 schema 范式）。
+  5. `test/memory-test.mjs`（新增）：临时目录造 dsh-kb → 断言 L1 必载、L2 关键词命中/限量、
+     L3 取近 3 天、kb 缺失降级不阻塞。
+- **验收**：
+  - `pnpm check` 全绿（含新增 memory 测试组；既有 5 组测试全数通过，证明 `/router-preset` 语义未变）；
+  - `loadMemoryContext` 单测：有效 kb + 「继续 veinmap 项目」→ context 含人物画像档案区 + veinmap 卡 +
+    最近日记；无匹配词 → 只有 L1；kbRoot 无效 → `{ok:false}` 且不抛。
+  - **未做/未验证**：tgz 安装 + 3082/3084 实例浏览器端到端（需用户授权装包并重启后验收）。
+
 ## v0.5.1（2026-09-28，路由参数可配 + 插件页原生配置区）
 
 - **用户原话（本轮）**：「给 dsh-switch-preset 加上真实可配参数，并注册到 DSH 插件页的原生配置区，

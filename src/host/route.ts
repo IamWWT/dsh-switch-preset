@@ -36,6 +36,7 @@ import {
   LIST_COMMAND_NAME,
   type AgentLike,
   type PresetRoster,
+  type RouteEnrich,
   type SwitchDeps,
   type SwitchResult,
 } from '../shared/contracts.ts'
@@ -76,6 +77,42 @@ function renderBoard(board: ScoreBoard, utterance: string): string {
 }
 
 /**
+ * 构造投递文本（v0.6.0 统一）：`判定详情`（未达阈值时）+ `记忆上下文`（enrich 注入时）+
+ * `用户原话`。任何可选段缺失/加载失败都不阻塞投递原话（铁律 #8 显式失败）。
+ *
+ * @param verdict - 未达阈值时的判定详情文本（达阈值路径传 undefined，投递内容不含判定详情）
+ * @param utterance - 用户原话（必然出现在投递文本末尾）
+ * @param enrich - /router-preset-memory 的记忆增强回调（undefined = /router-preset 普通路径）
+ * @param topId - 记忆匹配用的最高概率模式 id（enrich 需要）
+ * @returns 投递文本 + 可选记忆说明（回显用）
+ */
+async function composeDeliveryText(
+  verdict: string | undefined,
+  utterance: string,
+  enrich: RouteEnrich | undefined,
+  topId: string,
+): Promise<{ deliveryText: string; memoryNote?: string }> {
+  const bare = verdict === undefined
+    ? utterance
+    : `${verdict}\n\n---\n用户原话：\n${utterance}`
+  if (!enrich) return { deliveryText: bare }
+  try {
+    const memory = await enrich(utterance, topId)
+    if (!memory.ok || !memory.context) return { deliveryText: bare, memoryNote: memory.summary }
+    const parts: string[] = []
+    if (verdict !== undefined) parts.push(verdict)
+    parts.push(memory.context)
+    parts.push(`---\n用户原话：\n${utterance}`)
+    return { deliveryText: parts.join('\n\n'), memoryNote: memory.summary }
+  } catch (error) {
+    return {
+      deliveryText: bare,
+      memoryNote: `记忆加载异常（不影响本次投递）：${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+}
+
+/**
  * `/router-preset` 命令入口。
  *
  * @param agent - 当前 agent（切换目标）
@@ -83,6 +120,8 @@ function renderBoard(board: ScoreBoard, utterance: string): string {
  * @param deps - 切换依赖（与 /switch-preset 同一份）
  * @param scorer - 概率引擎（默认本地；将来 JEV 模型实现同一接口即可替换）
  * @param options - 路由参数（v0.5.1 可配：`routerEnabled=false` 时不切换不投递；`routerThreshold` 非法回落 0.6）
+ * @param enrich - v0.6.0 可选：投递前把「原话」加工为「记忆上下文 + 原话」
+ *   （`/router-preset-memory` 用；不传 = 行为与 v0.5.x 完全一致）
  */
 export async function routePreset(
   agent: AgentLike,
@@ -90,6 +129,7 @@ export async function routePreset(
   deps: SwitchDeps,
   scorer: ModeScorer,
   options: RouteOptions = {},
+  enrich?: RouteEnrich,
 ): Promise<SwitchResult> {
   const utterance = rawInput.trim()
   // 参数归一化（单一真源在 shared/router-settings.ts）：非法阈值回落 0.6，缺省 routerEnabled=true。
@@ -171,37 +211,81 @@ export async function routePreset(
     }
   }
 
-  // 4. 未达阈值 → 只提示不切换（用户 2026-09-28 决策），不出接力标记
+  // 4. 未达阈值 → 不切换模式（用户 2026-09-28 决策），但投递「判定详情 + 原话」到**当前模式**继续
+  //    （B1 修复 2026-10-05：上游 blank 状态机只认 turn/start 翻转，纯文本命令结果在新会话不可见；
+  //      投递必然产生 turn/start → 页面渲染判定详情，且原话在当前模式下被正常处理，不切错模式）。
   if (!board.passesThreshold || !top) {
     // 4a. 无判别力（全部并列）：不得给出"冠军"推荐（那只是排序副产品），如实说无法判定。
     //     现场依据（2026-09-28 3084 验收）：roster 为宿主内置模式时全为均匀先验。
+    let verdict: string
     if (board.undetermined) {
       const names = board.scores.map(s => s.label).slice(0, 8).join('、')
-      return {
-        kind: 'success',
-        text: [
-          header,
-          renderBoard(board, utterance).split('\n').slice(1).join('\n'),
-          '',
-          '→ **无法判定**：这些模式当前没有可用于判别的特征'
-            + `（全部并列 ${formatProbability(top?.probability ?? 0)}），不做切换，也不推荐具体模式。`,
-          `   原因通常是：当前 profile 只有宿主内置模式（${names}），而它们没有足够描述供打分。`,
-          `   请手动选择：/${COMMAND_NAME} <id>（用 /${LIST_COMMAND_NAME} 查看清单）。`,
-        ].join('\n'),
-      }
-    }
-    if (!top) {
+      verdict = [
+        header,
+        renderBoard(board, utterance).split('\n').slice(1).join('\n'),
+        '',
+        '→ **无法判定**：这些模式当前没有可用于判别的特征'
+          + `（全部并列 ${formatProbability(top?.probability ?? 0)}），不做切换，也不推荐具体模式。`,
+        `   原因通常是：当前 profile 只有宿主内置模式（${names}），而它们没有足够描述供打分。`,
+        `   请手动选择：/${COMMAND_NAME} <id>（用 /${LIST_COMMAND_NAME} 查看清单）。`,
+      ].join('\n')
+    } else if (!top) {
       return { kind: 'error', text: '没有可用模式用于判定，请用 /list-preset 检查模式配置。' }
-    }
-    return {
-      kind: 'success',
-      text: [
+    } else {
+      verdict = [
         header,
         renderBoard(board, utterance).split('\n').slice(1).join('\n'),
         '',
         `→ 最高概率 ${formatProbability(top.probability)} < 阈值 ${formatProbability(threshold)}，`
           + '**未自动切换**（避免低置信度切错模式）。',
         `   如确认切到该模式：/${COMMAND_NAME} ${top.id}，然后重新发送你的内容。`,
+      ].join('\n')
+    }
+
+    // B1 修复：把「判定详情（+记忆，enrich 注入时）+ 原话」投递到当前模式（不切换），
+    // 让页面可见且原话继续被处理。投递失败不假报成功（铁律 #8 显式失败）。
+    // 注意：enabled=false（用户显式关闭自动切换）已在 3a 分支返回，不走到这里。
+    const { deliveryText, memoryNote } = await composeDeliveryText(
+      verdict, utterance, enrich, top?.id ?? '',
+    )
+    if (!deps.deliverUtterance) {
+      return {
+        kind: 'success',
+        text: [
+          verdict,
+          ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
+          '',
+          '⚠️ **未投递你的原话**：当前 profile 没有可用的会话投递通道（sessionController 不可用）。',
+          '   已保留判定结果，请**手动重新发送**你的内容（在当前模式下继续）。',
+        ].join('\n'),
+      }
+    }
+    let delivery
+    try {
+      delivery = await deps.deliverUtterance(agent, deliveryText)
+    } catch (error) {
+      return {
+        kind: 'success',
+        text: [
+          verdict,
+          ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
+          '',
+          `⚠️ **未投递你的原话**：${error instanceof Error ? error.message : String(error)}`,
+          '   请**手动重新发送**你的内容（在当前模式下继续）。',
+        ].join('\n'),
+      }
+    }
+    return {
+      kind: 'success',
+      text: [
+        verdict,
+        ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
+        '',
+        delivery.ok
+          ? (memoryNote
+              ? `未切换模式；已把判定详情、记忆与你原话一起投递到当前模式继续：${delivery.message}`
+              : `未切换模式；已把判定详情与你原话一起投递到当前模式继续：${delivery.message}`)
+          : `⚠️ **未投递你的原话**：${delivery.message}\n   请**手动重新发送**你的内容（在当前模式下继续）。`,
       ].join('\n'),
     }
   }
@@ -220,7 +304,7 @@ export async function routePreset(
     }
   }
 
-  // 6. 切换成功 → ③ 投递原话（Host 侧），并按投递实况回显
+  // 6. 切换成功 → ③ 投递（v0.6.0：可经 enrich 把投递内容替换为「记忆上下文 + 原话」）
   const head = [
     header,
     renderBoard(board, utterance).split('\n').slice(1).join('\n'),
@@ -229,11 +313,18 @@ export async function routePreset(
     switched.text,
   ]
 
+  // v0.6.0：/router-preset-memory 的投递内容 = 记忆上下文 + 原话（命令层注入 enrich）。
+  // 记忆加载失败不阻塞：ok=false 时仅回显说明，仍按原话投递。
+  const { deliveryText, memoryNote } = await composeDeliveryText(
+    undefined, utterance, enrich, board.top.id,
+  )
+
   if (!deps.deliverUtterance) {
     return {
       kind: 'success',
       text: [
         ...head,
+        ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
         '',
         '⚠️ **未投递你的原话**：当前 profile 没有可用的会话投递通道（sessionController 不可用）。',
         `   已切换模式，请**手动重新发送**你的内容（会在「${board.top.label}」下执行）。`,
@@ -243,12 +334,13 @@ export async function routePreset(
 
   let delivery
   try {
-    delivery = await deps.deliverUtterance(agent, utterance)
+    delivery = await deps.deliverUtterance(agent, deliveryText)
   } catch (error) {
     return {
       kind: 'success',
       text: [
         ...head,
+        ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
         '',
         `⚠️ **未投递你的原话**：${error instanceof Error ? error.message : String(error)}`,
         '   已切换模式，请**手动重新发送**你的内容。',
@@ -260,9 +352,12 @@ export async function routePreset(
     kind: 'success',
     text: [
       ...head,
+      ...(memoryNote ? ['', `🧠 ${memoryNote}`] : []),
       '',
       delivery.ok
-        ? `接下来把你的原话作为「${board.top.label}」下的输入继续：${delivery.message}`
+        ? (memoryNote
+            ? `已把「${board.top.label}」相关记忆与原话一起投递：${delivery.message}`
+            : `接下来把你的原话作为「${board.top.label}」下的输入继续：${delivery.message}`)
         : `⚠️ **未投递你的原话**：${delivery.message}\n   已切换模式，请**手动重新发送**你的内容。`,
     ].join('\n'),
   }

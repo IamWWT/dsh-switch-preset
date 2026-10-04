@@ -1,6 +1,6 @@
 {
   "name": "dsh-switch-preset",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "DSH 会话模式切换：/switch-preset 在当前会话切换 Agent preset（空会话就地切换；已开始会话强制重装配），/list-preset 查看模式清单，/router-preset <你的原话> 按概率判定该用哪个模式（Top-1 达阈值即自动切换，并把你的原话在该模式下继续；达标前只展示概率分布）。参数在「左侧栏→插件→详情页」原生配置区可改：自动切换开关 + 判定阈值（默认 0.6）。",
   "keywords": [
     "dsh",
@@ -55,8 +55,8 @@
     "build": "node scripts/build.mjs --no-typecheck",
     "build:full": "node scripts/build.mjs",
     "typecheck": "node scripts/typecheck.mjs",
-    "test": "node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs && node test/router-test.mjs && node test/settings-test.mjs",
-    "check": "node scripts/build.mjs && node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs && node test/router-test.mjs && node test/settings-test.mjs",
+    "test": "node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs && node test/router-test.mjs && node test/memory-test.mjs && node test/settings-test.mjs",
+    "check": "node scripts/build.mjs && node test/smoke-test.mjs && node test/switch-test.mjs && node test/picker-test.mjs && node test/router-test.mjs && node test/memory-test.mjs && node test/settings-test.mjs",
     "pack": "npm pack",
     "install:dev": "bash scripts/install-to-dsh.sh"
   }

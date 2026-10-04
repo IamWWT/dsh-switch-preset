@@ -11,7 +11,10 @@ applies_to: dsh-switch-preset
 # FILE_INDEX - 文件索引
 
 > 由 Agent 维护：每次新增/删除/移动文件后更新本表。
-> 更新: 2026-09-28 | 项目: dsh-switch-preset
+> 更新: 2026-10-05 | 项目: dsh-switch-preset
+> 2026-10-05 v0.6.0 补录：src/host/memory.ts、test/memory-test.mjs；src/host/command.ts（第 4 条命令）、
+> src/host/route.ts（enrich 第 6 参 + B1 未达阈值投递）、src/shared/contracts.ts（MemoryContextResult/RouteEnrich）、
+> src/shared/router-settings.ts（Config 增 kbRoot）。
 > 2026-09-28 v0.5.1 补录：src/host/router.ts、src/host/route.ts、src/host/settings.ts、
 > src/client/settings-card.ts、src/client/settings-api.ts、src/shared/router-settings.ts、
 > src/shared/threshold.ts、test/router-test.mjs、test/settings-test.mjs。
@@ -72,15 +75,17 @@ applies_to: dsh-switch-preset
 - src/host/switch.ts - 切换/列表纯逻辑（select / recompose 强制 / 降级默认，可单测）
 - src/host/router.ts - 概率判定引擎（ModeScorer 接口 + LocalModeScorer，可插拔 JEV 接入点）
 - src/host/route.ts - `/router-preset` 三步编排（判定 → 复用 switchPreset 切换 → 投递）+ 路由参数归一化
+  + v0.6.0：可选第 6 参 `enrich`（记忆增强投递）+ B1 修复（未达阈值投递判定详情+原话到当前模式）
+- src/host/memory.ts - v0.6.0 `/router-preset-memory` 记忆加载（kbRoot 四层回退 + L1 画像/L2 项目/L3 日记 + 失败降级）
 - src/host/settings.ts - v0.5.1 设置面（volatile `routerSettings` 读/写/watch + REST 数据面 + host 侧阈值校验）
-- src/host/command.ts - 三条命令注册 + ctx 服务组装（buildSwitchDeps 惰性解析 settings/sessionController/路由参数）
+- src/host/command.ts - 四条命令注册 + ctx 服务组装（buildSwitchDeps 惰性解析 settings/sessionController/路由参数/kbRoot）
 - src/host/types.ts - cordis Context 最小服务类型扩展
 - src/client/entry.ts - Client 入口（ModuleLoader.load + 模式选择器 + `plugins.bundle.config` 配置卡注册）
 - src/client/ui.ts - React 组件（模式选择器：中文名/描述弹层，h 函数式）
 - src/client/settings-card.ts - v0.5.1 配置卡（自动切换开关 + 判定阈值 + 保存/恢复默认 + 失败文案）
 - src/client/settings-api.ts - v0.5.1 配置卡数据面（REST 适配器 + 长轮询热同步 + 明确错误）
-- src/shared/contracts.ts - 跨端契约（PresetRow/AgentPresetsLike/SwitchDeps/常量单一真源）
-- src/shared/router-settings.ts - v0.5.1 路由参数（类型/Config schema/归一化/边界，跨端单一真源）
+- src/shared/contracts.ts - 跨端契约（PresetRow/AgentPresetsLike/SwitchDeps/常量单一真源 + v0.6.0 MemoryContextResult/RouteEnrich/MEMORY_ROUTER_COMMAND_NAME）
+- src/shared/router-settings.ts - v0.5.1 路由参数（类型/Config schema/归一化/边界，跨端单一真源；v0.6.0 Config 增 `kbRoot` volatile 字段）
 - src/shared/threshold.ts - v0.5.1 阈值默认值 0.6 的唯一常量定义（避免 route↔settings 成环）
 
 ## test/（测试）
@@ -88,7 +93,8 @@ applies_to: dsh-switch-preset
 - test/smoke-test.mjs - 冒烟（产物/版本四处同步/导出完整性/Config 与配置区接线）
 - test/switch-test.mjs - switch/list 纯逻辑 10 组单测（v1.2 矩阵：select/recompose/降级/报错链）
 - test/picker-test.mjs - 模式选择器（Menu 接线/弹层数据）单测
-- test/router-test.mjs - `/router-preset` 判定/阈值/投递 22 项单测（v0.5.1 含可配参数用例）
+- test/router-test.mjs - `/router-preset` 判定/阈值/投递 22 项单测（v0.5.1 含可配参数用例；v0.6.0 未达阈值断言随 B1 语义更新）
+- test/memory-test.mjs - v0.6.0 记忆加载 6 项单测（kbRoot 解析/L1+L2+L3 加载/无关原话不加载/缺失知识库降级）
 - test/settings-test.mjs - v0.5.1 路由参数 25 项单测（归一化/写入校验/门面/REST/Config schema/配置卡片）
 
 ## scripts/（构建与安装）

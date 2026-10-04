@@ -46,7 +46,7 @@ export const name = 'dsh-switch-preset'
 export const inject: string[] = []
 
 /** 与 package.json version 同步（四处同步，改版本必同步本行）。 */
-export const VERSION = '0.5.1'
+export const VERSION = '0.6.0'
 
 /**
  * 0.1.7 原生设置面（v0.5.1）：插件行 volatile 字段 `routerSettings`。
@@ -55,7 +55,10 @@ export const VERSION = '0.5.1'
 export { Config }
 
 /** 在 Web 交互式界面运行时注册 /switch-preset 与 /list-preset。 */
-export function apply(ctx: Context, config?: { routerSettings?: { get?: () => unknown } }): void {
+export function apply(
+  ctx: Context,
+  config?: { routerSettings?: { get?: () => unknown }; kbRoot?: unknown },
+): void {
   // settings 服务晚于 apply 就绪 → 可变引用 + 命令执行时惰性读取（v0.2.1 起的既定做法）
   let settingsService: SettingsLike | undefined
   ctx.inject(['settings'], (settingsCtx) => {
@@ -90,13 +93,15 @@ export function apply(ctx: Context, config?: { routerSettings?: { get?: () => un
   })
 
   // 命令注册必须走二级注入（见文件头 v2.0）：拿到带 commands 的孩子上下文后用它注册，
-  // disposer 随该注入生命周期回收。v0.5.1 起把路由参数读取器一并注入（每次执行惰性取值）。
+  // disposer 随该注入生命周期回收。v0.5.1 起把路由参数读取器一并注入（每次执行惰性取值）；
+  // v0.6.0 起把 kbRoot 读取器一并注入（/router-preset-memory 记忆加载用，四层回退兜底）。
   ctx.inject(['commands', 'agentPresets'], (commandCtx) => {
     registerSwitchPresetCommands(
       commandCtx as unknown as PluginContext,
       () => settingsService,
       () => sessionController,
       () => facade.getSettings(),
+      () => ({ kbRoot: config?.kbRoot }),
     )
   })
 

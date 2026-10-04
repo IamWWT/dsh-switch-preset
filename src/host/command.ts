@@ -22,12 +22,14 @@ import {
   COMMAND_NAME,
   KEY_SELECTED_DEFAULT,
   LIST_COMMAND_NAME,
+  MEMORY_ROUTER_COMMAND_NAME,
   ROUTER_COMMAND_NAME,
   type SwitchDeps,
 } from '../shared/contracts.ts'
 import { listPresets, switchPreset } from './switch.ts'
 import { routePreset } from './route.ts'
 import { defaultScorer } from './router.ts'
+import { loadMemoryContext } from './memory.ts'
 import type { PluginContext, SettingsDescriptorLike, SettingsLike } from './types.ts'
 import type { RouterSettings } from '../shared/router-settings.ts'
 import { DEFAULT_ROUTER_SETTINGS } from '../shared/router-settings.ts'
@@ -70,6 +72,15 @@ export type GetSessionController = () => SessionControllerLike | undefined
  * 命令层对缺失/异常再兜一层出厂默认，保证 `/router-preset` 在设置面不可用时仍按原语义工作。
  */
 export type GetRouterSettings = () => RouterSettings
+
+/**
+ * 惰性解析 dsh-kb 知识库根目录配置（v0.6.0，/router-preset-memory 用）。
+ *
+ * 由 `index.ts` 把插件行配置原样传入（`config.kbRoot` 为 volatile 包装或普通字符串，
+ * 与 daily-workbench 同字段名）。`loadMemoryContext` 内部做四层回退
+ * （config → DASH_KB_HOME → 模块推导 → ~/dsh-kb），配置面缺失/异常**不阻塞命令**。
+ */
+export type GetKbRoot = () => { kbRoot?: unknown }
 
 /** 判定一个设置条目是否是 preset 注册表（带 selectedDefault 字段的那条）。 */
 function looksLikeRegistry(descriptor: SettingsDescriptorLike): boolean {
@@ -179,6 +190,7 @@ export function registerSwitchPresetCommands(
   getSettings: GetSettings,
   getSessionController?: GetSessionController,
   getRouterSettings?: GetRouterSettings,
+  getKbRoot?: GetKbRoot,
 ): void {
   ctx.commands.register({
     name: COMMAND_NAME,
@@ -207,7 +219,29 @@ export function registerSwitchPresetCommands(
     },
   })
 
+  // v0.6.0：记忆路由（用户 2026-10-05 需求，见 docs/REQUIREMENTS.md）——
+  // 与 /router-preset 相同的判定→切换，但投递内容 = dsh-kb 渐进加载的记忆上下文 + 原话，
+  // 让切换后模式下的 agent 开局就带相关记忆（L1 个人 → L2 项目 → L3 会话）。
+  // 记忆加载失败降级不阻塞（ok=false 时仍按原话投递，命令层回显说明）。
+  ctx.commands.register({
+    name: MEMORY_ROUTER_COMMAND_NAME,
+    description: '与 /router-preset 相同判定→切换，但投递时附带 dsh-kb 渐进加载的记忆（个人→项目→会话）',
+    input: { hint: '<你的原话>（判定模式并带记忆切换）' },
+    handler: async ({ agent, rawInput }) => {
+      const deps = buildSwitchDeps(ctx, getSettings, getSessionController, getRouterSettings)
+      const cfg = getKbRoot?.() ?? {}
+      return routePreset(
+        agent,
+        rawInput,
+        deps,
+        defaultScorer,
+        deps.getRouterSettings?.() ?? { ...DEFAULT_ROUTER_SETTINGS },
+        (utterance, topId) => loadMemoryContext(cfg, utterance),
+      )
+    },
+  })
+
   ctx.logger.info(
-    `[dsh-switch-preset] commands registered: /${COMMAND_NAME} + /${LIST_COMMAND_NAME} + /${ROUTER_COMMAND_NAME}`,
+    `[dsh-switch-preset] commands registered: /${COMMAND_NAME} + /${LIST_COMMAND_NAME} + /${ROUTER_COMMAND_NAME} + /${MEMORY_ROUTER_COMMAND_NAME}`,
   )
 }

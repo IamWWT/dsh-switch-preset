@@ -3,7 +3,7 @@
 ## 当前状态
 
 - 文档性质：会话交接单
-- 对应版本：v0.5.1（2026-09-28）
+- 对应版本：v0.6.0（2026-10-05）
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -12,7 +12,33 @@
 
 ## 🔄 进行中 / 上次进度
 
-0. **v0.5.1 路由参数可配 + 插件页原生配置区（2026-09-28）——代码与门禁完成，浏览器端到端未验收**：
+0. **v0.6.0 记忆路由 + B1 修复（2026-10-05）——代码、typecheck、单测全绿；tgz 已打包，安装未做**：
+   - **新增 `/router-preset-memory <原话>`**（用户记忆路由指导文件第 2 步）：与 `/router-preset`
+     相同判定→切换（复用 `switchPreset` 单一真源），但投递内容 = **dsh-kb 渐进加载的记忆
+     （L1 人物画像 ≤100 行 → L2 项目卡片关键词匹配 ≤2×40 行 → L3 近 3 天日记节选）+ 原话**。
+     实现：`src/host/memory.ts`（新增，纯逻辑零 LLM、零插件依赖；kbRoot 四层回退
+     config → DASH_KB_HOME → 模块推导 → ~/dsh-kb）；`routePreset` 可选第 6 参 `enrich`；
+     Config 新增 `kbRoot` volatile 字段。知识库缺失/读取失败 → `ok=false` **不阻塞**切换与投递。
+   - **B1 修复（用户现场反馈）**：新会话下 `/router-preset` 未达阈值 → 页面无任何输出。
+     根因（上游代码实证闭环）：未达阈值只返回 CommandResult（无会话事件）→ host blank 状态机
+     只认 `turn/start` 翻转（list.ts:49）→ chat 视图 isActive 要求非 command 节点
+     （chat-snapshot-builder.ts:1206 + 测试断言）→ activeTargets 实为 isActive 过滤
+     （assembly.ts:174）→ `DefaultConversationViews.tsx:35` blank 返回 null。**影响所有纯文本命令**。
+     修复（用户确认方案）：未达阈值**不切换模式**，但投递「判定详情 + 原话」到**当前模式**继续
+     （投递产生 turn/start → blank 翻转 → 判定详情必然可见）；投递失败如实回显不假报成功。
+     语义变更：v0.5.1「未达阈值不投递」→ v0.6.0「未达阈值不切换、但投递判定详情+原话到当前模式」；
+     `routerEnabled=false` 分支保持不投递（尊重开关）。
+   - 验证：双 tsconfig typecheck 全绿（@types/node 经 store junction 补链修复 pnpm install 残留）；
+     esbuild CLI 双端打包（lib/index.js 43695B 含 memory 接线与 VERSION 0.6.0）；
+     6 组测试全绿（冒烟 / switch / picker / router **22 项**（2 处断言随 B1 语义更新）/
+     memory **6 项**（新增）/ settings **25 项**）。
+   - **未做（需授权）**：`npm pack` 已产出 `dsh-switch-preset-0.6.0.tgz`（302945B），但**未安装**：
+     Windows 桌面版装 tgz + 托盘退出后重开验收（B1 的新会话低置信度场景 + memory 命令端到端）。
+   - 环境备注：Windows 本机 `node_modules` 顶层 esbuild/@types 链接因 pnpm install 中断缺失，
+     已建 junction 到 `.pnpm` store 恢复；插件 `lib/` 目录此前缺写权限（ACL），已按
+     diagnose-windows-sandbox-acl 修复（`acl-recovery/` 报告在 `D:\myrepo\proj\deepseek\acl-recovery\`）。
+
+1. **v0.5.1 路由参数可配 + 插件页原生配置区（2026-09-28）**：已交付并验证。
    - 交付：插件行 volatile 设置字段 `routerSettings`（`routerEnabled` 默认 true；`routerThreshold`
      默认 0.6、范围 0–1、非法回落）；`routePreset()` 第 5 参改 `RouteOptions` 并新增
      「判定后、切换前」的关闭早返回（不切换、不投递）；`src/host/settings.ts`（0.1.7 设置面 +
@@ -36,10 +62,15 @@
 
 ## ⏭ 下一步 / 待确认
 
-- **3082 安装待用户授权**（`pnpm dsh plugin --profile web add <0.5.1 tgz>` + `systemctl --user restart dsh-dev-web`）；
-  装完请用户做浏览器验收：插件详情页能看到「路由参数」卡片 → 关掉「自动切换」→
-  `/router-preset <原话>` 应只输出概率分布并写明"自动切换已关闭"、不切换、不投递；
-  再把阈值改成 0.99 保存 → 原本会自动切换的输入应变成"未自动切换"。
+- **安装 v0.6.0 待用户授权**：Windows 桌面版装 `dsh-switch-preset-0.6.0.tgz`
+  （`"D:/software/applications/DSH/resources/runtime/cli/bin/dsh.cmd" plugin --profile desktop add <abs tgz>`）
+  装完**必须托盘退出后重开桌面应用**（窗口 X 不退出进程，插件永不生效）。装完验收：
+  ① 新会话输入 `/router-preset <低置信度原话>`（如普通问候）→ 页面必须看到完整判定详情
+  （概率分布 + 未自动切换说明）且原话被当前模式继续处理（B1 修复的现场场景）；
+  ② 新会话输入 `/router-preset-memory <原话>` → 判定详情 + 「已加载记忆：L1…L2…L3…」回显，
+  且投递内容含 dsh-kb 记忆（注意先确认 profile 的 `kbRoot` 配置或 DASH_KB_HOME 指向 dsh-kb）；
+  ③ 达阈值场景行为不变（切换 + 投递原话）。
+  装完删旧 `dsh-switch-preset-0.5.1.tgz`（与 profile 引用变更同一步，只留 0.6.0 一份）。
 - 可选后续：把 `LocalModeScorer` 替换为 JEV 类模型的概率输出（`ModeScorer` 接口已就绪，命令层零改动）。
 
 ---

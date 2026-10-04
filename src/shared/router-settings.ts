@@ -90,4 +90,10 @@ export const RouterSettingsSchema = z.object({
 /** 插件行配置：0.1.7 原生设置面 = 本条的 volatile 字段 `routerSettings`。 */
 export const Config = z.object({
   routerSettings: RouterSettingsSchema.default({}).volatile(),
+  /**
+   * v0.6.0：dsh-kb 知识库根目录（/router-preset-memory 记忆加载用）。
+   * 与 daily-workbench 的 `kbRoot` 同字段名（本机解析后的绝对路径）。
+   * 未配置/为空 → loadMemoryContext 的四层回退兜底，命令不失效。
+   */
+  kbRoot: z.string().default('').volatile(),
 })

@@ -1,12 +1,13 @@
 /**
- * test/router-test.mjs — `/router-preset` 概率判定与接力契约单测（v0.5.1）
+ * test/router-test.mjs — `/router-preset` 概率判定与接力契约单测（v0.6.0）
  *
  * 覆盖（纯函数域，不需要 DSH 运行时）：
  *   1. 概率分布：6 模式全出、sum≈1、按概率降序；
  *   2. 判别力：明显属于某模式的输入，该模式概率显著最高（阈值可达）；
  *   3. 阈值行为：< 阈值不切换（无副作用）；
  *   4. 切换复用：达阈值时走 switchPreset（用假 deps 断言调用与结果）；
- *   5. 接力契约：达阈值且切换成功才投递；未达阈值/切换失败不投递；
+ *   5. 接力契约：达阈值且切换成功才投递；未达阈值也投递「判定详情+原话」到当前模式
+ *      （B1 修复 2026-10-05：新会话 blank 门控下纯命令结果不可见，投递必然翻转 blank）；
  *   6. 投递三态：通道缺失/被拒/抛错都如实回显"未投递"；
  *   7. **v0.5.1 可配参数**：`routerEnabled=false` 只判定不切换不投递（且明确说明已关闭）；
  *      `routerThreshold` 可配且生效（回显一致）；非法阈值回落默认 0.6 且不崩。
@@ -144,7 +145,7 @@ await check('达阈值：执行切换（复用 switchPreset）并把原话投递
   assert.ok(result.text.includes('已投递'), '应回显投递成功的 message')
 })
 
-await check('未达阈值：不产生切换副作用、不投递原话', async () => {
+await check('未达阈值：不切换，但把「判定详情 + 原话」投递到当前模式继续（B1 修复）', async () => {
   const { deps, calls } = fakeDeps()
   // 构造一个必然低于阈值的场景：阈值设到 1（没有任何模式能达到）
   const result = await routePreset(AGENT, '这个插件打包后加载报错', deps, scorer, { routerThreshold: 1 })
@@ -152,8 +153,10 @@ await check('未达阈值：不产生切换副作用、不投递原话', async (
   assert.equal(calls.select.length, 0, '不得调用 select')
   assert.equal(calls.recompose.length, 0, '不得调用 recompose')
   assert.equal(calls.wroteDefault.length, 0, '不得写默认模式')
-  assert.equal(calls.delivered.length, 0, '未达阈值不得投递原话')
+  assert.equal(calls.delivered.length, 1, '未达阈值也要投递（判定详情 + 原话，当前模式继续）')
   assert.ok(result.text.includes('未自动切换'), '应明确告知未切换')
+  assert.ok(calls.delivered[0].includes('这个插件打包后加载报错'), '投递内容必须包含原话')
+  assert.ok(calls.delivered[0].includes('未自动切换'), '投递内容必须包含判定详情（页面可见）')
 })
 
 await check('切换失败：不投递原话（避免在原模式下误跑）', async () => {
@@ -249,7 +252,7 @@ await check('自动切换关闭 + 无原话：仍报用法错误，零副作用'
   assert.equal(calls.select.length + calls.delivered.length, 0)
 })
 
-await check('阈值可配且生效：提高到 0.99 → 达阈值的输入不再自动切换（不投递）', async () => {
+await check('阈值可配且生效：提高到 0.99 → 达阈值的输入不再自动切换，但投递判定详情+原话到当前模式', async () => {
   const { deps, calls } = fakeDeps()
   const utterance = '这个插件打包后加载报错，帮我改代码'
   const base = scorer.score(CANDIDATES, utterance, DEFAULT_ROUTE_THRESHOLD)
@@ -258,7 +261,8 @@ await check('阈值可配且生效：提高到 0.99 → 达阈值的输入不再
   const result = await routePreset(AGENT, utterance, deps, scorer, { routerThreshold: 0.99 })
   assert.equal(result.kind, 'success')
   assert.equal(calls.select.length, 0, '未达新阈值不得切换')
-  assert.equal(calls.delivered.length, 0, '未达新阈值不得投递')
+  assert.equal(calls.delivered.length, 1, '未达新阈值但投递「判定详情 + 原话」到当前模式（B1）')
+  assert.ok(calls.delivered[0].includes(utterance), '投递内容必须包含原话')
   assert.ok(result.text.includes('99.0%'), '输出里的阈值必须是配置值（回显一致）')
   assert.ok(result.text.includes('未自动切换'))
 })
