@@ -75,7 +75,7 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
    * 运行时回落（非法 → 0.6）发生在 host 侧（`normalizeRouterSettings`），这里不重复掩盖：
    * 否则用户会看到"0.6 已保存"而实际配置里躺着 5，无从发现。
    */
-  const readFromScope = (): { enabled: boolean; threshold: string } => {
+  const readFromScope = (): { enabled: boolean; threshold: string; kbRoot: string } => {
     try {
       const raw = scope?.getSnapshot()?.value ?? {}
       return {
@@ -83,9 +83,14 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
         threshold: raw.routerThreshold === undefined
           ? String(DEFAULT_ROUTER_SETTINGS.routerThreshold)
           : String(raw.routerThreshold),
+        kbRoot: typeof raw.kbRoot === 'string' ? raw.kbRoot : '',
       }
     } catch {
-      return { enabled: DEFAULT_ROUTER_SETTINGS.routerEnabled, threshold: String(DEFAULT_ROUTER_SETTINGS.routerThreshold) }
+      return {
+        enabled: DEFAULT_ROUTER_SETTINGS.routerEnabled,
+        threshold: String(DEFAULT_ROUTER_SETTINGS.routerThreshold),
+        kbRoot: '',
+      }
     }
   }
 
@@ -94,6 +99,7 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
   const Card = function Card(_props: Record<string, unknown>) {
     const [enabled, setEnabled] = R.useState<boolean>(initial.enabled)
     const [thresholdText, setThresholdText] = R.useState<string>(initial.threshold)
+    const [kbRoot, setKbRoot] = R.useState<string>(initial.kbRoot)
     const [snapshotStatus, setSnapshotStatus] = R.useState<string>(() => scope?.getSnapshot()?.status ?? 'unavailable')
     const [saving, setSaving] = R.useState(false)
     const [notice, setNotice] = R.useState<string | null>(null)
@@ -115,6 +121,7 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
           const latest = readFromScope()
           setEnabled(latest.enabled)
           setThresholdText(latest.threshold)
+          setKbRoot(latest.kbRoot)
         } catch {
           /* 快照异常：保持上一次状态 */
         }
@@ -146,18 +153,21 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
       }
       setSaving(true)
       try {
-        const fields = { routerEnabled: enabled, routerThreshold: thresholdValue }
+        const fields = { routerEnabled: enabled, routerThreshold: thresholdValue, kbRoot }
         if (typeof scope.setFields === 'function') {
           await scope.setFields(fields)
         } else {
           // 兜底：数据面只提供单字段写入时逐字段写（后写的失败会如实报错）
           await scope.set('routerEnabled', fields.routerEnabled)
           await scope.set('routerThreshold', fields.routerThreshold)
+          await scope.set('kbRoot', fields.kbRoot)
         }
         const synced = readFromScope()
         setThresholdText(synced.threshold)
+        setKbRoot(synced.kbRoot)
         setNotice(
           `已保存：自动切换${enabled ? '开启' : '关闭'}，阈值 ${synced.threshold}`
+            + (synced.kbRoot ? `，kbRoot ${synced.kbRoot}` : '，kbRoot 留空（自动回退）')
             + '（下一次 /router-preset 生效）',
         )
       } catch (e) {
@@ -172,6 +182,7 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
       setNotice(null)
       setEnabled(DEFAULT_ROUTER_SETTINGS.routerEnabled)
       setThresholdText(String(DEFAULT_ROUTER_SETTINGS.routerThreshold))
+      setKbRoot('')
     }
 
     if (!scope || snapshotStatus === 'unavailable') {
@@ -246,6 +257,32 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
 
       h(
         'div',
+        { style: { ...ROW_STYLE, alignItems: 'flex-start' } },
+        h('label', { style: { ...LABEL_STYLE, marginTop: 4 }, htmlFor: 'dsh-switch-preset-kbRoot' }, '知识库路径'),
+        h('input', {
+          id: 'dsh-switch-preset-kbRoot',
+          type: 'text',
+          value: kbRoot,
+          disabled: saving,
+          placeholder: '如 D:\\myrepo\\proj\\deepseek\\data\\dsh-kb',
+          onChange: (e: { target?: { value?: string } }) => {
+            setKbRoot(String(e?.target?.value ?? ''))
+            setNotice(null)
+            setError(null)
+          },
+          style: { ...controlStyle, width: 320 },
+          'aria-label': '/router-preset-memory 的知识库根目录（可留空自动回退）',
+        }),
+      ),
+      h(
+        'div',
+        { style: { ...NOTE_STYLE, marginTop: 2, marginLeft: 106 } },
+        '/router-preset-memory 读取 dsh-kb 记忆用的根目录；留空则自动回退（DASH_KB_HOME → 模块推导 → ~/dsh-kb），'
+          + '找不到时命令不失效（只投递原话并说明）。',
+      ),
+
+      h(
+        'div',
         { style: { ...ROW_STYLE, justifyContent: 'flex-start' } },
         h(
           'button',
@@ -277,6 +314,23 @@ export function createSettingsCard(deps: SettingsCardDeps): SettingsCardUI {
         '关闭「自动切换」后，`/router-preset <原话>` 仍会给出完整概率判定，但**不切换模式、也不投递你的原话**，'
           + `需要时用 /switch-preset <id> 手动切换。当前设置：自动切换${enabled ? '开启' : '关闭'}`
           + `，阈值 ${thresholdValid ? thresholdValue : '（输入非法，保存会被拒绝）'}。`,
+      ),
+
+      h('div', { style: { ...NOTE_STYLE, borderTop: `1px solid ${THEME.border}`, paddingTop: 10, marginTop: 14 } },
+        h('div', { style: { fontWeight: 600, fontSize: 12.5, color: THEME.labelPrimary } }, '命令与使用帮助'),
+        h('div', { style: { marginTop: 6 } },
+          h('div', null, '· `/switch-preset <模式id>` — 手动切换到指定模式（id 见 `/list-preset`，如 engineering）'),
+          h('div', null, '· `/list-preset` — 列出全部模式的中文名与描述'),
+          h('div', null, '· `/router-preset <原话>` — 概率判定该用哪个模式：达阈值自动切换并投递原话；'
+            + '未达阈值**不切换**，但把判定详情与你的原话投递到当前模式继续（页面必然可见）'),
+          h('div', null, '· `/router-preset-memory <原话>` — 同 /router-preset，但投递内容额外附带 dsh-kb '
+            + '渐进加载的记忆（个人画像 → 项目卡片 → 近 3 天日记），切换后模式开局即带记忆'),
+        ),
+        h('div', { style: { marginTop: 8 } },
+          '三个参数：**自动切换**（是否在达阈值时自动换模式）、**判定阈值**（0–1，Top-1 概率达它才切换）、'
+            + '**知识库路径**（kbRoot，记忆路由读 dsh-kb 的根目录，留空自动回退）。所有参数保存后'
+            + '**下一次命令即生效**，无需重启。',
+        ),
       ),
     )
   }

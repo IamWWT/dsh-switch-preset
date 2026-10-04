@@ -11,7 +11,7 @@ applies_to: dsh-switch-preset
 ## 当前状态
 
 - 文档性质：需求演进真源（需求→决策→实现→验收）
-- 对应版本：v0.5.1（2026-09-28）
+- 对应版本：v0.6.1（2026-10-05）
 - 状态：有效（如与实现不符，以代码与 `docs/REQUIREMENTS.md` 为准）
 - 维护者：AI + 用户
 
@@ -20,6 +20,28 @@ applies_to: dsh-switch-preset
 
 > 每轮需求/反馈 → 决策 → 实现落点 → 验收，按时间记录。原始需求/规格见
 > `docs/00-request/request.md` 与 `docs/specs/001-switch-preset/spec.md`。
+
+## v0.6.1（2026-10-05，用户反馈：配置页帮助说明与可设置内容不完整）
+
+- **用户原话**：「插件详情设置页面没有完整的帮助说明，和可设置内容。需要显式有」
+- **问题（对照现状）**：
+  1. 配置卡片只有「自动切换 + 判定阈值」两个控件，没有任何帮助说明；
+  2. v0.6.0 新增的 `kbRoot`（/router-preset-memory 的知识库根目录）已在 Config schema
+     声明，但**配置卡片没有该输入项**，host 写入白名单也不含它——用户无法在设置页配置
+     kbRoot，只能手改 profile，与「显式有」的要求不符。
+- **决策（v0.6.1）**：
+  1. **帮助说明区块**：卡片顶部新增「命令与使用说明」——三条命令用途 +
+     `/router-preset-memory`（记忆路由，kbRoot 语义）+ 未达阈值行为（判定详情投递到当前模式）
+     + 关闭自动切换的后果，全部用主题 token、与卡片同字体层级。
+  2. **kbRoot 纳入设置面可配**：卡片新增「知识库路径（kbRoot）」文本框（可留空 =
+     DASH_KB_HOME/自动回退）；host `buildWriteOps` 白名单加 `kbRoot`（必须是字符串），
+     ops 路径为独立 volatile 字段 `['kbRoot']`（不是 routerSettings 对象内）；REST GET 的
+     value 一并返回 `kbRoot`；`loadMemoryContext` 的 kbRoot 读取走同一配置字段
+     （config.kbRoot，volatile），配置卡保存即写 profile 条目配置，无需重启生效。
+- **验收（用户可感知）**：插件详情页打开后能看到：① 帮助说明区块（含 4 条命令用途、
+  阈值与开关语义、未达阈值行为、kbRoot 指向 dsh-kb 的说明）；② 设置项共 3 个——
+  「自动切换」「判定阈值」「知识库路径（kbRoot）」，保存后 `/router-preset-memory`
+  确实按新 kbRoot 读记忆（留空则走自动回退，命令不失效）。
 
 ## v0.6.0 补充（2026-10-05，用户现场反馈 B1：未达阈值时判定详情不可见）
 

@@ -20,6 +20,7 @@
 import {
   DEFAULT_ROUTER_SETTINGS,
   Config,
+  KB_ROOT_FIELD,
   normalizeRouterSettings,
   ROUTER_SETTING_KEYS,
   type RouterSettings,
@@ -53,6 +54,8 @@ export interface SettingsWriteInput {
 /** 设置读写门面（路由层用；缺失时设置端点不注册，命令仍按默认值工作）。 */
 export interface RouterSettingsFacade {
   getSettings(): RouterSettings
+  /** v0.6.1：读 kbRoot 当前值（volatile/普通字符串/缺失 → ''，绝不抛）。 */
+  getKbRoot(): string
   currentRevision(): number
   write(input: SettingsWriteInput): Promise<{ revision: number }>
   watch(timeoutMs: number): Promise<{ changed: boolean; revision: number }>
@@ -80,8 +83,8 @@ export interface RouterSettingsConfigLike {
 export function buildWriteOps(
   input: SettingsWriteInput,
 ): Array<{ op: 'set' | 'unset'; path: string[]; value?: unknown }> {
-  const isKnown = (key: string): key is (typeof ROUTER_SETTING_KEYS)[number] =>
-    (ROUTER_SETTING_KEYS as readonly string[]).includes(key)
+  const isKnown = (key: string): boolean =>
+    (ROUTER_SETTING_KEYS as readonly string[]).includes(key) || key === KB_ROOT_FIELD
 
   for (const key of Object.keys(input.fields ?? {})) {
     if (!isKnown(key)) throw new Error(`未知设置项：${key}`)
@@ -104,10 +107,17 @@ export function buildWriteOps(
   if (enabled !== undefined && typeof enabled !== 'boolean') {
     throw new Error('自动切换开关必须是布尔值')
   }
+  const kbRoot = fields[KB_ROOT_FIELD]
+  if (kbRoot !== undefined && typeof kbRoot !== 'string') {
+    throw new Error('知识库路径（kbRoot）必须是字符串')
+  }
+
+  /** v0.6.1：kbRoot 是 Config **独立** volatile 字段（路径 `['kbRoot']`），router 参数是对象内子路径。 */
+  const pathOf = (key: string): string[] => (key === KB_ROOT_FIELD ? [KB_ROOT_FIELD] : [SETTINGS_FIELD, key])
 
   const ops = [
-    ...Object.entries(fields).map(([k, v]) => ({ op: 'set' as const, path: [SETTINGS_FIELD, k], value: v })),
-    ...(input.clear ?? []).map(k => ({ op: 'unset' as const, path: [SETTINGS_FIELD, k], value: undefined })),
+    ...Object.entries(fields).map(([k, v]) => ({ op: 'set' as const, path: pathOf(k), value: v })),
+    ...(input.clear ?? []).map(k => ({ op: 'unset' as const, path: pathOf(k), value: undefined })),
   ]
   if (ops.length === 0) throw new Error('fields/clear 至少其一')
   return ops
@@ -117,11 +127,11 @@ export function buildWriteOps(
  * 构造设置门面（0.1.7 原生路径）。
  *
  * @param c - host 上下文（取 settings 服务、事件总线、fiber entry id）
- * @param config - 插件行配置（`config.routerSettings` 为 loader 维护的 volatile 引用）
+ * @param config - 插件行配置（`config.routerSettings` / `config.kbRoot` 均为 loader 维护的 volatile 引用）
  */
 export function createRouterSettingsFacade(
   c: SettingsHostContext,
-  config?: { routerSettings?: RouterSettingsConfigLike },
+  config?: { routerSettings?: RouterSettingsConfigLike; kbRoot?: unknown },
 ): RouterSettingsFacade {
   const settingsService = (typeof c.get === 'function' ? c.get('settings') : undefined) as
     | SettingsServiceLike
@@ -139,6 +149,19 @@ export function createRouterSettingsFacade(
     }
   }
 
+  /** v0.6.1：读 kbRoot 当前值（volatile 包装 / 普通字符串 / 缺失 → ''；绝不抛）。 */
+  const getKbRoot = (): string => {
+    try {
+      const raw = config?.kbRoot
+      const inner = typeof raw === 'object' && raw !== null && typeof (raw as { get?: unknown }).get === 'function'
+        ? (raw as { get: () => unknown }).get()
+        : raw
+      return typeof inner === 'string' ? inner : ''
+    } catch {
+      return ''
+    }
+  }
+
   const currentRevision = (): number => {
     try {
       const rows = settingsService?.describe?.() ?? []
@@ -151,6 +174,7 @@ export function createRouterSettingsFacade(
 
   const facade: RouterSettingsFacade = {
     getSettings,
+    getKbRoot,
     currentRevision,
     async write(input: SettingsWriteInput) {
       const ops = buildWriteOps(input)
@@ -172,7 +196,8 @@ export function createRouterSettingsFacade(
         const off = typeof c.on === 'function'
           ? c.on('loader/volatile-update', (paths: unknown) => {
               const list = Array.isArray(paths) ? (paths as unknown[]) : []
-              if (list.some(p => Array.isArray(p) && p[0] === SETTINGS_FIELD)) finish(true)
+              // v0.6.1：kbRoot（独立字段）变更也要触发热同步，卡片才能跟随配置卡保存。
+              if (list.some(p => Array.isArray(p) && (p[0] === SETTINGS_FIELD || p[0] === KB_ROOT_FIELD))) finish(true)
             })
           : () => {}
       })
@@ -271,7 +296,11 @@ export function registerRouterSettingsRoutes(ws: WebServerLike | null | undefine
     const method = req.method || 'GET'
     if (method === 'GET') {
       try {
-        sendJson(res, 200, { value: facade.getSettings(), revision: facade.currentRevision(), writable: true })
+        sendJson(res, 200, {
+          value: { ...facade.getSettings(), kbRoot: facade.getKbRoot() },
+          revision: facade.currentRevision(),
+          writable: true,
+        })
       } catch (error) {
         sendJson(res, 500, { ok: false, error: String((error as { message?: string })?.message ?? error) })
       }
@@ -293,7 +322,11 @@ export function registerRouterSettingsRoutes(ws: WebServerLike | null | undefine
     }
     try {
       const out = await facade.write(body)
-      sendJson(res, 200, { ok: true, revision: out.revision, value: facade.getSettings() })
+      sendJson(res, 200, {
+        ok: true,
+        revision: out.revision,
+        value: { ...facade.getSettings(), kbRoot: facade.getKbRoot() },
+      })
     } catch (error) {
       sendJson(res, statusOf(error), {
         ok: false,

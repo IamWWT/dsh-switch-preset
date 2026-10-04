@@ -74,6 +74,13 @@ export function isValidRouterThreshold(value: unknown): boolean {
 export const ROUTER_SETTING_KEYS: readonly RouterSettingKey[] = ['routerEnabled', 'routerThreshold']
 
 /**
+ * v0.6.1：kbRoot 字段名——`/router-preset-memory` 的知识库根目录（Config 独立 volatile 字段，
+ * `settings.mutate` 路径 = `['kbRoot']`，**不是** routerSettings 对象内）。与 v0.6.0 命令层
+ * （`loadMemoryContext` 的 readKbRoot）同一字段名，配置卡保存即写 profile 条目配置。
+ */
+export const KB_ROOT_FIELD = 'kbRoot'
+
+/**
  * 0.1.7 原生设置面 schema（照 `dsh-minesweeper` 范式）：
  *   - `z.object(...).default({}).volatile()` → 读 = `config.routerSettings.get()`；
  *   - 字段名 `routerSettings` 即 settings.mutate 的路径根（`['routerSettings', <key>]`）。

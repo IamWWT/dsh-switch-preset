@@ -2,7 +2,11 @@
 
 DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会话内**切换 Agent preset（DSH 的"会话模式"），用 `/list-preset` 查看可填写的模式 id 与中文描述，用 `/router-preset <你的原话>` **按概率自动判定该切哪个模式**并接着把你的原话在该模式下继续。
 
-> 版本: 0.6.0 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> 版本: 0.6.1 | 语言: TypeScript（Host + Client 双端）| 目标实例: Web GUI（3082 dev web / 临时实例）
+> v0.6.1（2026-10-05）：**配置页补全（用户反馈）**——插件详情页配置区新增
+> 「命令与使用帮助」区块（四条命令用途 + 三个参数语义 + 未达阈值行为），并新增
+> **「知识库路径（kbRoot）」可配置项**（/router-preset-memory 读 dsh-kb 的根目录，
+> 留空自动回退 DASH_KB_HOME → 模块推导 → ~/dsh-kb；保存即生效，无需重启）。
 > v0.6.0（2026-10-05）：**新增 `/router-preset-memory`（记忆路由）+ 修复新会话命令结果不可见（B1）**——
 > ① `/router-preset-memory <原话>` 与 `/router-preset` 相同的判定→切换，但投递内容 = **dsh-kb
 > 渐进加载的记忆（L1 个人画像 → L2 项目卡片 → L3 近 3 天会话日记）+ 你的原话**，切换后模式下的
@@ -36,7 +40,7 @@ DSH 会话模式切换插件：用斜杠指令 `/switch-preset` **在当前会�
 | **`/router-preset-memory <你的原话>`** | **记忆路由**（v0.6.0）：与 `/router-preset` 相同判定→切换，但投递内容 = **dsh-kb 渐进加载的记忆（L1 个人 → L2 项目 → L3 会话）+ 原话**，切换后模式开局带记忆 |
 | id 从哪来 | 直接复制 `/list-preset` 里括号中的 id（如 `engineering`、`research`） |
 | composer 工具行「⇄」按钮 | 弹出模式列表；**置顶项「⚡ 按内容自动判定模式」**＝对输入框当前内容执行 `/router-preset`，其余项点选即 `/switch-preset <id>` |
-| 插件页配置区（v0.5.1） | 「左侧栏 → 插件 → dsh-switch-preset」详情页正文的两个参数：**自动切换**开关 + **判定阈值**数字框（含保存/恢复默认） |
+| 插件页配置区（v0.6.1） | 「左侧栏 → 插件 → dsh-switch-preset」详情页正文：**命令与使用帮助** + 三个参数（**自动切换**开关 + **判定阈值**数字框 + **知识库路径 kbRoot** 文本框，含保存/恢复默认） |
 
 ### 可配参数（v0.5.1，插件页配置区）
 

@@ -46,7 +46,7 @@ export const name = 'dsh-switch-preset'
 export const inject: string[] = []
 
 /** 与 package.json version 同步（四处同步，改版本必同步本行）。 */
-export const VERSION = '0.6.0'
+export const VERSION = '0.6.1'
 
 /**
  * 0.1.7 原生设置面（v0.5.1）：插件行 volatile 字段 `routerSettings`。

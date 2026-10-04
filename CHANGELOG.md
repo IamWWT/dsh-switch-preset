@@ -1,5 +1,31 @@
 # CHANGELOG
 
+## 0.6.1（2026-10-05）— 配置页补全：帮助说明区块 + kbRoot 可配（用户反馈）
+
+- **需求原话**（用户 2026-10-05）：「插件详情设置页面没有完整的帮助说明，和可设置内容。需要显式有」
+- **问题**：配置卡片只有「自动切换 + 判定阈值」两个控件、无任何帮助说明；v0.6.0 的 `kbRoot`
+  （/router-preset-memory 知识库根目录）已在 Config schema 声明但**配置卡片不可配**、
+  host 写入白名单也不含它——用户只能在 profile 手改，与「可设置内容要显式」不符。
+- **Client（`src/client/settings-card.ts`）**：
+  - 新增「命令与使用帮助」区块（置于卡片底部，主题 token）：`/switch-preset`、`/list-preset`、
+    `/router-preset`（含未达阈值行为：不切换但投递判定详情+原话到当前模式）、
+    `/router-preset-memory`（记忆路由 + kbRoot 语义）；三个参数语义 + 保存即生效说明。
+  - 新增「知识库路径（kbRoot）」文本框（可留空 = DASH_KB_HOME/自动回退）；保存提交三个字段
+    （开关 + 阈值 + kbRoot），回显文案含 kbRoot 状态；恢复默认清空 kbRoot。
+- **Host（`src/host/settings.ts`）**：
+  - `buildWriteOps`：白名单加 `kbRoot`（必须是字符串）；ops 路径 `['kbRoot']`（Config **独立**
+    volatile 字段，与 routerSettings 对象内路径区分开）；
+  - facade 新增 `getKbRoot()`（volatile 包装/普通字符串/缺失 → ''，绝不抛）；watch 热同步
+    同时监听 `kbRoot` 变更；REST GET/PUT 的 value 平铺返回 kbRoot（卡片读回显示）。
+- **shared**：`src/shared/router-settings.ts` 新增 `KB_ROOT_FIELD = 'kbRoot'` 常量（防魔数字）。
+- **测试**：`test/settings-test.mjs` 新增 2 项（kbRoot 独立路径 + 非字符串拒绝 + unset 路径；
+  kbRoot 与 router 参数同写路径各自正确），更新 2 项（GET value 含 kbRoot、卡片保存三字段）；
+  现有全量（smoke / switch / picker / router 22 / memory 6 / settings 27）全绿；
+  双 tsconfig typecheck 通过。
+- **版本同步**：0.6.1（package.json / src/index.ts / README / CHANGELOG + tgz 文件名）。
+- **未做（需用户重启验收）**：重新装 tgz 后需托盘退出重开桌面应用，在插件详情页确认
+  帮助区块 + kbRoot 输入框可见、保存后 `/router-preset-memory` 按新 kbRoot 读记忆。
+
 ## 0.6.0（2026-10-05）— 记忆路由 `/router-preset-memory` + 修复新会话命令结果不可见（B1）
 
 - **需求依据**：

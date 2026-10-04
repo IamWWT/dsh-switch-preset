@@ -39,6 +39,7 @@ const {
   isValidRouterThreshold,
   normalizeRouterSettings,
   normalizeRouterThreshold,
+  KB_ROOT_FIELD,
 } = await import(await bundle('src/shared/router-settings.ts', 'router-settings.mjs'))
 const {
   buildWriteOps,
@@ -114,6 +115,24 @@ await check('越界/非数阈值 → 明确错误（host 侧上下限校验）',
   assert.throws(() => buildWriteOps({ fields: { routerThreshold: -1 } }), /超出范围/)
   assert.throws(() => buildWriteOps({ fields: { routerThreshold: 'abc' } }), /必须是数字/)
   assert.throws(() => buildWriteOps({ fields: { routerEnabled: 'on' } }), /必须是布尔值/)
+})
+
+await check('v0.6.1 kbRoot：独立 volatile 字段路径 ["kbRoot"]，非字符串拒绝', () => {
+  const ops = buildWriteOps({ fields: { kbRoot: 'D:/proj/dsh-kb' } })
+  assert.deepEqual(ops, [{ op: 'set', path: [KB_ROOT_FIELD], value: 'D:/proj/dsh-kb' }])
+  assert.throws(() => buildWriteOps({ fields: { kbRoot: 42 } }), /必须是字符串/)
+  assert.throws(() => buildWriteOps({ fields: { kbRoot: null } }), /必须是字符串/)
+  const unsetOps = buildWriteOps({ clear: ['kbRoot'] })
+  assert.deepEqual(unsetOps, [{ op: 'unset', path: [KB_ROOT_FIELD], value: undefined }])
+})
+
+await check('v0.6.1 kbRoot + router 参数同写：路径各自正确（对象内 vs 独立字段）', () => {
+  const ops = buildWriteOps({ fields: { routerEnabled: true, routerThreshold: 0.7, kbRoot: '' } })
+  assert.deepEqual(ops, [
+    { op: 'set', path: [SETTINGS_FIELD, 'routerEnabled'], value: true },
+    { op: 'set', path: [SETTINGS_FIELD, 'routerThreshold'], value: 0.7 },
+    { op: 'set', path: [KB_ROOT_FIELD], value: '' },
+  ])
 })
 
 await check('空操作 → 明确错误', () => {
@@ -291,7 +310,7 @@ await check('REST：注册 /settings 与 /settings/watch（exact）', () => {
   assert.ok([...ws.routes.values()].every(r => r.kind === 'exact'))
 })
 
-await check('REST GET /settings → { value, revision }', async () => {
+await check('REST GET /settings → { value(+kbRoot), revision }', async () => {
   const host = fakeHost({ settingsValue: { routerEnabled: false, routerThreshold: 0.9 } })
   const ws = fakeWebServer()
   registerRouterSettingsRoutes(ws, createRouterSettingsFacade(host.ctx, host.config))
@@ -301,7 +320,8 @@ await check('REST GET /settings → { value, revision }', async () => {
   await ws.routes.get('/api/dsh-switch-preset/settings').handler(req, res)
   assert.equal(out.status, 200)
   const body = JSON.parse(out.body)
-  assert.deepEqual(body.value, { routerEnabled: false, routerThreshold: 0.9 })
+  // v0.6.1：value 平铺 kbRoot（未配置 → ''），卡片才能读回显示
+  assert.deepEqual(body.value, { routerEnabled: false, routerThreshold: 0.9, kbRoot: '' })
   assert.equal(body.revision, 7)
   assert.equal(body.writable, true)
 })
@@ -472,7 +492,7 @@ await check('配置卡片：渲染「自动切换」开关 + 「判定阈值」�
   assert.ok(findNode(tree, n => n.props?.['data-plugin-config'] === 'dsh-switch-preset'), '容器需带 data-plugin-config 便于定位')
 })
 
-await check('配置卡片：保存 → setFields(两个字段并按快照归一化回显) + 成功文案', async () => {
+await check('配置卡片：保存 → setFields(三个字段：开关+阈值+kbRoot) + 成功文案', async () => {
   const fake = fakeReact()
   const { scope, calls } = fakeScope({ routerEnabled: true, routerThreshold: 0.6 })
   const { Card } = createSettingsCard({ React: fake.React, scope })
@@ -484,8 +504,8 @@ await check('配置卡片：保存 → setFields(两个字段并按快照归一�
 
   const save = findNode(tree, n => n.type === 'button' && n.children?.[0] === '保存')
   await save.props.onClick()
-  assert.deepEqual(calls.setFields, [{ routerEnabled: false, routerThreshold: 0.85 }],
-    '保存必须一次提交两个字段（避免一半成功的中间态）')
+  assert.deepEqual(calls.setFields, [{ routerEnabled: false, routerThreshold: 0.85, kbRoot: '' }],
+    'v0.6.1 保存必须一次提交三个字段（开关+阈值+kbRoot，避免一半成功的中间态）')
 
   tree = renderCard(fake, Card)
   const notice = findNode(tree, n => n.props?.role === 'status')
